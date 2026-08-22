@@ -68,6 +68,16 @@ for g in fetch qc align classify stats; do
 done
 ```
 
+### 1.0.0
+
+| Image | Digest |
+|---|---|
+| `cami-fetch`    | `sha256:3ba26b22bbdf62f8c90429203becb53d83d28267998cedfeaaf1e4f6d3becc41` |
+| `cami-qc`       | `sha256:a343d3becba31d2e3950a87f8978a1c8beece0b5c0d196b0eddc5eb2e18ce280` |
+| `cami-align`    | `sha256:162cc0d5ef2c8525fe537ed45854bec4a578c2c8de6c7b3e2269a3db47453bf4` |
+| `cami-classify` | `sha256:336f1817ff651eec7180ebf9e23f59f4e85b723ff26fb10a9c96d463080d2836` |
+| `cami-stats`    | `sha256:abe0973e988a61574e2dfb17f646c8f1e3930db51d6211edda4cbfd773a47e43` |
+
 Each run also records the image it used in `results/pipeline_info/`.
 
 ## Databases
