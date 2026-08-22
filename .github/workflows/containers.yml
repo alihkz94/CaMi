@@ -1,0 +1,136 @@
+# =============================================================================
+# containers.yml — build and publish the five CaMi images
+# -----------------------------------------------------------------------------
+# This is where reproducibility actually happens. The whole point of CaMi being
+# containerised is that the run which produced a published number can be repeated
+# after bwa-mem2, Kraken 2 and polars have all moved on. That only holds if the
+# images exist somewhere immutable, so they are built here and pushed to the
+# GitHub Container Registry alongside the code that describes them.
+#
+# WHEN IT RUNS
+#   - on a tag v*            the release build; this is the one that publishes
+#   - on a push to main      build only, so a broken definition is caught at once
+#   - on a pull request touching containers/ or env/   build only
+#   - manually               workflow_dispatch
+#
+# ONLY A TAG PUSHES. Everything else builds and throws the result away, which is
+# the test. Publishing from a branch would let an unreviewed image take a tag
+# that someone else's -resume is already keyed to.
+#
+# BUMPING THE TAG
+#   params.container_tag in conf/containers.config is the single source of truth
+#   and is read below. Change it in the same commit that changes an environment
+#   file, never separately: a tag that points at two different images over its
+#   life is worse than no tag at all.
+# =============================================================================
+name: Containers
+
+# NO `paths:` FILTER ON THE PUSH TRIGGER, DELIBERATELY.
+# GitHub applies a push `paths:` filter to tag pushes as well as branch pushes,
+# and requires BOTH to match. A release tag on a commit that only touched docs
+# would therefore skip the image build entirely — and the release would point at
+# images that were never built. Every tag builds; whether it PUSHES is decided
+# further down, by ref type.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'containers/**'
+      - 'env/**'
+      - 'conf/containers.config'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: cami-${{ matrix.group }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # One broken environment should not hide the state of the other four.
+      fail-fast: false
+      matrix:
+        group: [fetch, qc, align, classify, stats]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the image tag from conf/containers.config
+        id: tag
+        run: |
+          set -euo pipefail
+          tag=$(sed -n "s/^[[:space:]]*container_tag[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" \
+                conf/containers.config | head -1)
+          [[ -n "$tag" ]] || { echo "could not read container_tag"; exit 1; }
+          echo "value=$tag" >> "$GITHUB_OUTPUT"
+          echo "container_tag = $tag"
+
+      - name: Free disk space
+        # The classify image carries Kraken 2, Bracken and Kaiju; the default
+        # runner image leaves too little room once the conda solve unpacks.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the registry
+        # Only a tag publishes. See the push step for why.
+        if: github.ref_type == 'tag'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          # The repository root, not containers/<group>/ — the stats image needs
+          # env/requirements-stats.txt.
+          context: .
+          file: containers/${{ matrix.group }}/Dockerfile
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cami-${{ matrix.group }}:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=cami-${{ matrix.group }}
+          cache-to: type=gha,mode=max,scope=cami-${{ matrix.group }}
+
+      - name: The tools must actually run
+        # A conda solve can succeed and still leave nothing on PATH — which is
+        # exactly what happens if the micromamba entrypoint is relied on, because
+        # Nextflow bypasses it. Invoke each tool the way a task would.
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/cami-${{ matrix.group }}:${{ steps.tag.outputs.value }}"
+          run() { docker run --rm --entrypoint /bin/bash "$IMAGE" -c "$1"; }
+          case "${{ matrix.group }}" in
+            fetch)    run 'aria2c --version | head -1; samtools --version | head -1; bgzip --version | head -1; python3 -V' ;;
+            qc)       run 'fastp --version; seqkit version; pigz --version; python3 -V' ;;
+            align)    run 'bwa-mem2 version; minimap2 --version; samtools --version | head -1; awk --version | head -1' ;;
+            classify) run 'kraken2 --version | head -1; bracken -v 2>&1 | head -1; kaiju -h 2>&1 | head -1' ;;
+            stats)    run 'python3 -c "import polars, pyarrow, numpy, scipy, statsmodels; print(polars.__version__, pyarrow.__version__, numpy.__version__, scipy.__version__, statsmodels.__version__)"' ;;
+          esac
+          # ps is what Nextflow reads to record peak memory. Without it the trace
+          # is silently empty, and conf/base.config is tuned from that trace.
+          run 'ps --version'
+
+      - name: Push
+        # ONLY FROM A TAG. A push to main must not be able to move an existing
+        # image tag: somebody's -resume is keyed to it, and a task that silently
+        # changes its software mid-cohort is the exact failure containers exist
+        # to prevent. Branch pushes and pull requests build and throw the result
+        # away, which is the test.
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/${{ matrix.group }}/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository_owner }}/cami-${{ matrix.group }}:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=cami-${{ matrix.group }}

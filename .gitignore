@@ -1,0 +1,68 @@
+# =============================================================================
+# .gitignore
+# -----------------------------------------------------------------------------
+# This folder holds ONLY code and documents. The data — about 4 TB of sequence,
+# reference indexes, and results — lives one level up and is outside the
+# repository, so it cannot be committed by accident.
+#
+# Data root (NOT in this repository), wherever --dataRoot points:
+#     fastq/  reference/  kraken2_db/  work/  results/  manifests/
+#     calibration/  slurm_logs/  tmp/  envs/  singularity/
+#
+# ../envs/stats is the statistics venv. It is rebuilt from the pinned versions in
+# env/requirements-stats.txt, so the environment is reproducible from the
+# repository while the installed binaries themselves are never committed:
+#     bash scripts/analysis/setup_stats_env.sh
+# =============================================================================
+
+# --- Nextflow run state ---
+.nextflow/
+.nextflow.log*
+work/
+results/
+pipeline_info/
+
+# --- container images ---
+# Built or pulled by scripts/containers/. A .sif is one to four gigabytes; the
+# DEFINITIONS in containers/ are what belong in git, and they are what rebuild it.
+sif/
+*.sif
+*.simg
+singularity/
+apptainer/
+
+# --- anything large that lands here by mistake ---
+*.fastq
+*.fastq.gz
+*.fa
+*.fa.gz
+*.fna
+*.fna.gz
+*.bam
+*.bai
+*.mmi
+*.k2d
+*.fmi
+
+# --- cluster logs ---
+slurm_logs/
+*.out
+*.err
+
+# --- backups of adapted files ---
+*.orig
+
+# --- python ---
+__pycache__/
+*.py[cod]
+
+# --- virtual environments (belong in the data root, never committed) ---
+envs/
+.venv/
+venv/
+
+# --- editors and operating systems ---
+.DS_Store
+*.swp
+.idea/
+.vscode/

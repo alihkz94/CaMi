@@ -1,0 +1,97 @@
+# Creates the GitHub Release for a tag, and keeps its notes in step with
+# CHANGELOG.md afterwards. Notes come from the section for the current version.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to rebuild notes for (default: the current version)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve the tag
+        id: v
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" = tag ]; then
+              tag="${{ github.ref_name }}"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+              tag="${{ github.event.inputs.tag }}"
+          else
+              tag="v$(sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" \
+                     nextflow.config | head -1)"
+          fi
+          echo "tag=$tag"             >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}"     >> "$GITHUB_OUTPUT"
+
+      - name: Check the version is consistent
+        run: bash scripts/release/check_version.sh "${{ steps.v.outputs.tag }}"
+
+      - name: Build the notes
+        run: |
+          set -euo pipefail
+          python3 - "${{ steps.v.outputs.version }}" > RELEASE_NOTES.md <<'PY'
+          import re, sys
+          version = sys.argv[1]
+          text = open("CHANGELOG.md").read()
+          m = re.search(r"^##\s+" + re.escape(version) + r"\b.*?$(.*?)(?=^##\s+\d|\Z)",
+                        text, re.S | re.M)
+          if not m:
+              sys.exit(f"CHANGELOG.md has no '## {version}' section")
+          body = re.sub(r"\n*-{3,}[ \t]*$", "", m.group(1).strip()).strip()
+          if not body:
+              sys.exit(f"the '## {version}' section is empty")
+          print(body)
+          PY
+          cat >> RELEASE_NOTES.md <<EOF
+
+          ---
+
+          \`\`\`bash
+          nextflow run alihkz94/CaMi -r ${{ steps.v.outputs.tag }} \\
+              -profile singularity,slurm \\
+              --dataRoot /path/to/cohort --step PROFILE -resume
+          \`\`\`
+
+          Images: \`ghcr.io/alihkz94/cami-{fetch,qc,align,classify,stats}:${{ steps.v.outputs.version }}\`
+          EOF
+
+      - name: Publish or update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='${{ steps.v.outputs.tag }}'
+          if gh release view "$tag" >/dev/null 2>&1; then
+              gh release view "$tag" --json body -q .body | tr -d '\r' > current.md
+              # -w -B: GitHub can normalise whitespace when it stores the body,
+              # which would otherwise look like a change on every push.
+              if diff -q -w -B current.md RELEASE_NOTES.md >/dev/null 2>&1; then
+                  echo "Notes for $tag are already current."
+                  exit 0
+              fi
+              gh release edit "$tag" --notes-file RELEASE_NOTES.md
+              echo "Updated the notes for $tag."
+          elif [ "${{ github.ref_type }}" = tag ]; then
+              args=(--title "CaMi ${{ steps.v.outputs.version }}" --notes-file RELEASE_NOTES.md)
+              case "$tag" in *-*) args+=(--prerelease);; esac
+              gh release create "$tag" "${args[@]}"
+              echo "Created the release for $tag."
+          else
+              echo "No release for $tag yet; nothing to do."
+          fi

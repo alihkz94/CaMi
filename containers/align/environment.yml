@@ -1,0 +1,27 @@
+# =============================================================================
+# cami-align — host and human removal, and the indexes they need
+# -----------------------------------------------------------------------------
+# Processes: BUILD_HOST_INDEX, BUILD_MM2_INDEX, HOST_REMOVAL, HUMAN_REMOVAL
+#
+# The aligner and samtools MUST share one image: HOST_REMOVAL pipes bwa-mem2
+# straight into samtools and into bin/keep_nonhost.sh, in a single stream that
+# is never written to disk.
+#
+# gawk is pinned deliberately. bin/keep_nonhost.sh decides host vs non-host in
+# awk, from a coverage fraction and a divergence fraction. The script uses no GNU
+# extension, so it RUNS under mawk too — but mawk and gawk do not handle floating
+# point identically, and this comparison sits at a threshold. Pinning one awk
+# means the rule cannot drift between machines. That rule was wrong twice before
+# (docs/methods.md); it is not a place to accept an implementation-defined answer.
+# =============================================================================
+name: base
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bwa-mem2=2.3
+  - minimap2=2.31
+  - samtools=1.24
+  - pigz=2.8
+  - gawk=5.3.1
+  - procps-ng=4.0.4

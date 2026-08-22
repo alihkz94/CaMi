@@ -1,0 +1,33 @@
+# =============================================================================
+# requirements-stats.txt — the environment for --step STATS
+# -----------------------------------------------------------------------------
+# Exact versions that produced the downstream statistics. Install with
+#     bash scripts/analysis/setup_stats_env.sh
+# which builds a venv at <dataRoot>/envs/stats.
+#
+# WHY A SEPARATE ENVIRONMENT
+#   The profiling tools (bwa-mem2, Kraken 2, Bracken, Kaiju, fastp, samtools)
+#   live in the conda env `cancer`. Installing a scientific Python stack into
+#   that env while a 563-sample run is using it risks pulling a shared
+#   dependency out from under a running job. A venv cannot do that: it is a
+#   separate prefix and the conda env is never modified.
+#
+#   It also keeps the two concerns honest — changing a statistics library must
+#   never invalidate a profiling result, and vice versa.
+#
+# PYTHON: 3.12.13 (the interpreter the venv is built from)
+# =============================================================================
+
+# tables — polars is the project convention, never pandas
+polars==1.43.2
+pyarrow==25.0.1
+
+# numerics: the exact permutation enumeration and the CLR transform
+numpy==2.5.2
+
+# Wilcoxon signed-rank, used as the rank-based cross-check
+scipy==1.18.0
+
+# Benjamini-Hochberg FDR across taxa
+statsmodels==0.14.6
+patsy==1.0.2

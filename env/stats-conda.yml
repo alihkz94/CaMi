@@ -1,0 +1,30 @@
+# =============================================================================
+# stats-conda.yml — the statistics environment, for -profile conda
+# -----------------------------------------------------------------------------
+# WHY THIS FILE EXISTS SEPARATELY FROM containers/stats/environment.yml
+#   The container installs the scientific stack with pip, from
+#   requirements-stats.txt, because pyarrow 25.0.1 has no conda-forge build.
+#   micromamba's handling of a `pip:` section inside an environment file is not
+#   dependable enough to rely on inside an image build, but `conda env create`
+#   — which is what Nextflow's conda integration calls — handles it correctly.
+#   So the container gets a conda-only file plus an explicit pip step, and the
+#   conda profile gets this one file that does both.
+#
+# THE PINS BELOW MUST MATCH env/requirements-stats.txt EXACTLY.
+# .github/workflows/ci.yml fails the build if they drift apart, because two
+# environments that claim to be the same and are not is worse than having one.
+# =============================================================================
+name: cami-stats
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.13
+  - pip=25.3
+  - procps-ng=4.0.4
+  - pip:
+    - polars==1.43.2
+    - pyarrow==25.0.1
+    - numpy==2.5.2
+    - scipy==1.18.0
+    - statsmodels==0.14.6
+    - patsy==1.0.2

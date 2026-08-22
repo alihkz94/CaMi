@@ -1,0 +1,291 @@
+# =============================================================================
+# ci.yml — what can be checked without 4 TB of sequence data
+# -----------------------------------------------------------------------------
+# There is no end-to-end test here and it would be dishonest to pretend
+# otherwise: the smallest realistic input is a 55 GB BAM and a 16 GB Kraken
+# database. What CI *can* do is catch the class of mistake that has actually
+# cost time on this project — a config that does not parse, a profile that was
+# added to the docs but not to nextflow.config, and two environment files that
+# drifted apart.
+#
+# The images are built by containers.yml, which is a real test of the container
+# definitions: if an environment cannot be solved, that build fails.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  nextflow:
+    name: Nextflow syntax and profiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          # Pinned to the version the pipeline is developed and linted against.
+          # Not 'latest': `nextflow lint` is part of the strict parser and its
+          # output changes between releases, so an unpinned CI would start
+          # failing on a commit that changed nothing.
+          version: '26.04.6'
+
+      - name: Lint every .nf and .config file
+        run: nextflow lint .
+
+      - name: Resolve every profile
+        # A profile that does not resolve is a profile nobody can use. The engine
+        # profiles are also checked in combination with an executor and with the
+        # site profile, because that is how they are actually invoked and because
+        # profile ORDER decides which params win.
+        run: |
+          set -euo pipefail
+          for p in standard local slurm sge lsf conda test mpi_bremen \
+                   singularity apptainer docker podman \
+                   singularity,slurm apptainer,slurm docker,local \
+                   test,singularity mpi_bremen,singularity; do
+              echo "::group::-profile $p"
+              nextflow config -profile "$p" . > /dev/null
+              echo "::endgroup::"
+          done
+
+      - name: Every profile named in the README must exist
+        run: |
+          set -euo pipefail
+          missing=0
+          for p in $(grep -ohE '\-profile [a-z_,]+' README.md docs/*.md \
+                     | awk '{print $2}' | tr ',' '\n' | sort -u); do
+              if ! nextflow config -profile "$p" . > /dev/null 2>&1; then
+                  echo "README/docs mention -profile $p, which does not resolve"
+                  missing=1
+              fi
+          done
+          exit $missing
+
+  version:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: manifest.version, CHANGELOG.md and the tag must agree
+        # On a tag push the tag is checked too. Everywhere else only the two
+        # files are compared, because there is no tag to compare against yet.
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+              bash scripts/release/check_version.sh "${{ github.ref_name }}"
+          else
+              bash scripts/release/check_version.sh
+          fi
+
+      - name: The changelog entry must have been written
+        # bump_version.sh leaves a skeleton on purpose. Releasing it would
+        # publish a version nobody can tell apart from the one before it.
+        if: github.ref_type == 'tag'
+        run: |
+          if grep -q 'TITLE ME' CHANGELOG.md; then
+              echo "CHANGELOG.md still contains the skeleton from bump_version.sh."
+              echo "Write the entry for this release before tagging it."
+              exit 1
+          fi
+          echo "OK — no unfilled changelog skeleton."
+
+  environments:
+    name: Environment files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: The two statistics environments must agree
+        run: python3 scripts/containers/check_pins.py
+
+      - name: Install PyYAML
+        # actions/setup-python installs a clean interpreter. The runner image's
+        # system python has PyYAML; this one does not.
+        run: pip install --quiet pyyaml
+
+      - name: Every environment file must be valid YAML
+        run: |
+          python3 - <<'PY'
+          import sys, pathlib, yaml
+          bad = 0
+          for p in sorted(pathlib.Path('.').glob('**/*.yml')):
+              if '.github' in p.parts:
+                  continue
+              try:
+                  yaml.safe_load(p.read_text())
+              except Exception as e:
+                  print(f"{p}: {e}")
+                  bad = 1
+          sys.exit(bad)
+          PY
+
+  scripts:
+    name: Shell and Python scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every shell script must parse
+        run: |
+          set -euo pipefail
+          # `bash -n`, not shellcheck: the .sbatch files are Slurm submission
+          # scripts whose directives shellcheck reads as comments and whose
+          # environment it cannot know. Parsing is the check that means something.
+          find . -name '*.sh' -o -name '*.sbatch' | while read -r f; do
+              echo "  $f"
+              bash -n "$f"
+          done
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Every Python script must compile
+        run: python3 -m compileall -q bin scripts
+
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    # The statistics are the part of CaMi that can be wrong without failing.
+    # A permutation test with the wrong p-value convention returns a plausible
+    # number; a sample-code parser that reads "_HC" as a tissue moves samples
+    # into the wrong arm and nothing anywhere disagrees. Both have happened
+    # here, in a released pipeline, so both are checked against brute-force
+    # ground truth on every push.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          # REQUIRED with `cache: pip`. The action hashes a dependency file to
+          # key the cache and looks for requirements.txt at the root by default;
+          # this repository has none, so the step fails outright — before any
+          # test runs — with "Some specified paths were not resolved".
+          cache-dependency-path: env/requirements-stats.txt
+
+      - name: Install the pinned statistics stack
+        # The same file the container installs from, so a test that passes here
+        # is a test of the software the pipeline actually runs.
+        #
+        # openpyxl is NOT in that file on purpose — no pipeline task reads a
+        # workbook — but tests/test_ena_metadata.py imports the ENA helper, which
+        # does. Without it that module raises SkipTest at import and its grammar
+        # tests silently never run, in a job called "Unit tests".
+        run: |
+          pip install --quiet -r env/requirements-stats.txt
+          pip install --quiet openpyxl==3.1.5
+
+      - name: Every test module must import
+        # A SkipTest raised while importing hides a whole FILE. The run stays
+        # green and the count barely moves, which is exactly how it goes
+        # unnoticed — test_ena_metadata.py did this until openpyxl was added
+        # above. Importing each module directly turns that into a failure.
+        run: |
+          python3 - <<'PY'
+          import importlib, pathlib, sys, traceback
+          sys.path.insert(0, "tests")
+          bad = []
+          for p in sorted(pathlib.Path("tests").glob("test_*.py")):
+              try:
+                  importlib.import_module(p.stem)
+              except BaseException:
+                  traceback.print_exc()
+                  bad.append(p.name)
+          if bad:
+              sys.exit(f"these test modules do not import: {bad}")
+          print("OK — every test module imports.")
+          PY
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s tests -v
+
+  samplesheet:
+    name: Input routes
+    runs-on: ubuntu-latest
+    # The three input routes are decided in Groovy, which no Python test can
+    # reach. These run the real resolution against real files, so a samplesheet
+    # that stops parsing is caught before somebody's cohort is.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: '26.04.6'
+
+      - name: Build a tiny cohort
+        run: |
+          set -euo pipefail
+          mkdir -p cohort/fastq cohort/reference
+          cd cohort/fastq
+          # three mate spellings at once — all three must be recognised
+          for n in S1 S2; do
+              : | gzip > ${n}_R1_001.fastq.gz; : | gzip > ${n}_R2_001.fastq.gz
+          done
+          : | gzip > S3_R1.fastq.gz; : | gzip > S3_R2.fastq.gz
+          : | gzip > S4_1.fq.gz;     : | gzip > S4_2.fq.gz
+          cd ../reference
+          for e in 0123 amb ann bwt.2bit.64 pac; do : > "host.fa.$e"; done
+          : > GRCh38.primary.mmi
+          cd ../..
+          cat > cohort/samples.csv <<'EOF'
+          sample,fastq_1,fastq_2,individual,tissue,disease_status,dna_prep
+          T01,fastq/S1_R1_001.fastq.gz,fastq/S1_R2_001.fastq.gz,animal_01,haemolymph,tumor,native
+          H01,fastq/S2_R1_001.fastq.gz,fastq/S2_R2_001.fastq.gz,animal_01,foot,matched host,native
+          T02,fastq/S3_R1.fastq.gz,fastq/S3_R2.fastq.gz,animal_02,haemolymph,tumor,native
+          H02,fastq/S4_1.fq.gz,fastq/S4_2.fq.gz,animal_02,foot,matched host,native
+          EOF
+
+      - name: A directory of FASTQ resolves
+        run: |
+          set -euo pipefail
+          nextflow run . -preview -profile local --step PROFILE \
+              --dataRoot "$PWD/cohort" --input "$PWD/cohort/fastq" \
+              --host_prefix host.fa --run_kaiju false 2>&1 | tee out.log
+          grep -q '4 sample(s) from --input (directory)' out.log
+
+      - name: A samplesheet resolves
+        run: |
+          set -euo pipefail
+          nextflow run . -preview -profile local --step PROFILE \
+              --dataRoot "$PWD/cohort" --input "$PWD/cohort/samples.csv" \
+              --host_prefix host.fa --run_kaiju false 2>&1 | tee out.log
+          grep -q '4 sample(s) from --input (samplesheet)' out.log
+
+      - name: A bad input fails with a message that names all three routes
+        run: |
+          set -euo pipefail
+          mkdir -p empty
+          # No --input and no manifests: the error must not read as
+          # "this pipeline needs an ENA study".
+          if nextflow run . -preview -profile local --step PROFILE \
+                 --dataRoot "$PWD/empty" --host_prefix host.fa \
+                 --run_kaiju false > out.log 2>&1; then
+              echo "expected a failure, got success"; exit 1
+          fi
+          grep -q 'samplesheet' out.log
+          grep -q 'directory of FASTQ' out.log
+          grep -q 'ENA study' out.log

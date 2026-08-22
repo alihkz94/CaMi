@@ -1,0 +1,23 @@
+# =============================================================================
+# cami-classify — taxonomic assignment
+# -----------------------------------------------------------------------------
+# Processes: KRAKEN2_BRACKEN, KAIJU
+#
+# The DATABASES are not in this image and never will be: Standard-16 is 16 GB,
+# Kaiju nr_euk is 187 GB. They are bind-mounted at run time from --kraken_db and
+# --kaiju_db. See docs/usage.md for how to fetch them.
+#
+# Bracken is pinned to 3.1, not 3.1p1: 3.1 is the build that produced the
+# published abundance tables.
+# =============================================================================
+name: base
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - kraken2=2.17.1
+  - bracken=3.1
+  - kaiju=1.10.2
+  - gawk=5.3.1          # the kingdom roll-up in modules/local/kaiju.nf
+  - coreutils=9.11
+  - procps-ng=4.0.4

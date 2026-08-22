@@ -1,0 +1,18 @@
+# =============================================================================
+# cami-stats — the downstream statistics (--step STATS)
+# -----------------------------------------------------------------------------
+# Processes: AGGREGATE_COUNTS, BUILD_PAIRS, PAIRED_TEST
+#
+# ONLY the interpreter comes from conda. The scientific stack is installed with
+# pip from env/requirements-stats.txt, which holds the exact versions that
+# produced the published statistics — including pyarrow 25.0.1, which exists on
+# PyPI but not on conda-forge (which stops at 25.0.0). Reproducing the numbers
+# matters more than keeping one package manager.
+# =============================================================================
+name: base
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.13
+  - pip=25.3
+  - procps-ng=4.0.4

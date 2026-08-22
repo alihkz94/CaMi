@@ -1,0 +1,50 @@
+# =============================================================================
+# cami-qc — Singularity/Apptainer definition
+# -----------------------------------------------------------------------------
+# You do NOT need this file to run CaMi with Singularity. The normal path is to
+# let Nextflow pull the published OCI image, which Singularity converts itself:
+#     nextflow run alihkz94/CaMi -profile singularity,slurm ...
+#
+# This definition exists for the case that has no other answer: an air-gapped
+# cluster, or an audit that wants the image rebuilt from source rather than
+# trusted from a registry.
+#
+# BUILD FROM THE REPOSITORY ROOT (%files paths are relative to it):
+#     cd /path/to/CaMi
+#     singularity build --fakeroot cami-qc.sif containers/qc/Singularity.def
+#
+# --fakeroot needs a subuid/subgid range for your account. Without one, ask an
+# administrator, or build the OCI image elsewhere and copy the .sif across.
+# =============================================================================
+Bootstrap: docker
+From: mambaorg/micromamba:2.3.2-debian12-slim
+
+%files
+    containers/qc/environment.yml /tmp/environment.yml
+
+%post
+    set -eu
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    micromamba install -y -n base -f /tmp/environment.yml
+    micromamba clean --all --yes
+    rm -f /tmp/environment.yml /tmp/requirements-stats.txt
+
+    # Singularity runs as the invoking user, who is not mambauser and is often
+    # not in any group the build used. Without this the environment is present
+    # but unreadable, and every task fails with "command not found".
+    chmod -R a+rX /opt/conda
+
+%environment
+    export PATH=/opt/conda/bin:\$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%labels
+    org.opencontainers.image.title cami-qc
+    org.opencontainers.image.source https://github.com/alihkz94/CaMi
+    org.opencontainers.image.licenses MIT
+
+%test
+    set -eu
+    export PATH=/opt/conda/bin:\$PATH
+    fastp --version; seqkit version; pigz --version; python3 -V
