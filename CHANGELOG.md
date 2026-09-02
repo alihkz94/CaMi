@@ -6,6 +6,24 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 
 ---
 
+## 1.0.1 — 2026-09-02
+
+### Fixed
+
+- A submission rejected by the scheduler is now retried instead of being treated
+  as a failed sample. Nextflow retries failed submissions only when the error
+  text matches `executor.retry.reason`, which defaults to `Socket timed out`; any
+  other wording fell through to the per-process `errorStrategy` and was ignored.
+  Because the affected tasks never ran, everything downstream of them waited on
+  inputs that could never arrive and the run deadlocked while still holding its
+  allocation. `conf/base.config` now sets a broader `reason` pattern covering the
+  common transient failures for Slurm, SGE and LSF.
+- `errorStrategy` for the per-sample processes now distinguishes a task that ran
+  and failed from one that never started. Only the former is eligible to be
+  dropped; a task with no exit status always retries.
+
+---
+
 ## 1.0.0 — 2026-08-21
 
 First release. Recovers the incidental microbial fraction from host whole-genome
