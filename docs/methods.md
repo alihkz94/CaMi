@@ -146,6 +146,27 @@ analysis, not as the primary result:
 --kraken_db /slurm-databases/Kraken2/PlusPF_20250402 --kraken_mem_gb 130 --kraken_forks 4
 ```
 
+### Re-measured with adapter trimming and a stronger host reference
+
+The floor above was measured before adapter trimming (section 8) and with a single
+host assembly. The measurement was repeated on the full cockle cohort (563
+samples) after adapter trimming and a second host screen against three *C. edule*
+assemblies (GCA_947846245.1, GCA_963989375.1, GCA_963989325.1). The host-only
+floor was taken from 2.2 million real cockle reads that the single-assembly screen
+had missed, and from 2 million simulated reads.
+
+| standard-16 | host-only floor | median sample / floor | samples > 5 × |
+|---|---|---|---|
+| conf 0 | 0.0901 % | 6 × | 59 % |
+| conf 0.05 | 0.0086 % | 31 × | 93 % |
+| conf 0.1 | 0.0020 % | 81 × | 98 % |
+
+With that host reference, confidence 0.05 is the better setting: it removes the
+genera produced by host reads while keeping validated marine genera. Confidence
+0.1 starts to lose real genera. The default stays at 0 because the ratio depends
+on how well the host reference covers the host's diversity; measure the floor for
+your own host before changing it.
+
 ---
 
 ## 4. Why `Homo` appears, and why it is not contamination
@@ -204,3 +225,20 @@ hyperthermophile appeared in one test. **A subsample of that size measures nothi
 
 `--subsample` is for pipeline tests only. Production uses 0, which keeps every read.
 A full run holds roughly 30 million pairs, about 75 times more.
+
+---
+
+## 8. Adapter trimming
+
+fastp finds adapters by the overlap of the two mates, which needs an insert of at
+least about 30 bp. Adapter dimers (inserts of 10–30 bp) therefore kept their
+adapter, and poly-G tails were not trimmed because auto-detection relies on
+Illumina read headers that ENA-renamed reads no longer carry. Kraken 2 assigned
+these reads to bacteria: in the cockle cohort they became two of the most prevalent
+"species" (*Xanthomonas euvesicatoria* and *Mycobacterium canetti*). None of 420
+such reads had a BLAST hit to either genus.
+
+fastp is now given the adapters (`--adapter_r1`, `--adapter_r2`; TruSeq by default),
+trims poly-G, drops reads shorter than `--min_read_len` (50 bp) and applies its
+low-complexity filter. Adapter-carrying reads were about 0.1 % of the non-host
+reads, but they sat in a few taxa and dominated those.

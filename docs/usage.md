@@ -147,6 +147,8 @@ Always pass `-resume`. Do not delete `work/` — `-resume` needs it.
 | `--sample_code_scheme` | `bruzos` reads the cockle study's sample-code grammar; `none` treats a name as a name. Default: `bruzos` on the ENA route, `none` otherwise |
 | `--samples A,B` | only these samples; also accepts a file, one name per line |
 | `--subsample N` | use N read pairs — **testing only** |
+| `--adapter_r1`, `--adapter_r2` | adapter sequences given to fastp. Default: TruSeq |
+| `--min_read_len N` | shortest read kept after trimming. Default: 50 |
 | `--run_kaiju false` | skip the protein search |
 | `--publish_intermediates false` | do not publish trimmed and host-removed FASTQ |
 | `--kraken_db PATH` | another database; move `--kraken_mem_gb`/`--kraken_forks` with it |

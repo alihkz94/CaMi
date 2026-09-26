@@ -6,6 +6,21 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 
 ---
 
+## Unreleased
+
+### Changed
+
+- fastp is given the adapter sequences (`--adapter_r1`, `--adapter_r2`; TruSeq by
+  default), trims poly-G, drops reads shorter than `--min_read_len` (50 bp) and
+  applies its low-complexity filter.
+- `docs/methods.md`: adapter trimming (section 8) and the classifier noise floor
+  re-measured after trimming with a multi-assembly host reference (section 3).
+
+Results change: adapter dimers and poly-G reads that were assigned to bacteria
+are removed. Rerun `SUBSAMPLE_TRIM` and everything after it.
+
+---
+
 ## 1.0.1 — 2026-09-02
 
 ### Fixed
