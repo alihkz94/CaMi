@@ -110,6 +110,26 @@ Memory and parallelism follow the database size:
 Use `--run_kaiju false` if the memory is not available. Note that on the same
 reads Kaiju found 3,249 bacterial pairs where Kraken 2 found 210.
 
+**BLAST nt and an NCBI taxdump** — only for `--run_confirm`, which checks every
+detection with Kaiju and BLAST (docs/methods.md, section 9). nt is about 700 GB;
+`taxdb` must sit in the same directory:
+
+```bash
+mkdir -p /db/blast && cd $_
+update_blastdb.pl --decompress nt taxdb        # ships with BLAST+
+
+mkdir -p /db/taxonomy/taxdump && cd $_
+curl -O https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
+tar xzf taxdump.tar.gz nodes.dmp names.dmp merged.dmp
+```
+
+```bash
+--run_confirm true --blast_db /db/blast/nt --confirm_taxdump /db/taxonomy/taxdump
+```
+
+Use a taxdump at least as new as the newest of the three databases: taxids that
+NCBI has merged since are resolved through `merged.dmp`.
+
 ## Running
 
 ```bash
@@ -139,6 +159,11 @@ still going, using whatever samples have finished.
 
 Always pass `-resume`. Do not delete `work/` — `-resume` needs it.
 
+To confirm the detections of a run that has already finished, repeat its
+`PROFILE` command with `--run_confirm true --blast_db ... --confirm_taxdump ...`
+and `-resume`. Only the confirmation runs; it reads Kaiju's per-read output from
+`work/`.
+
 ## Options
 
 | Option | What it does |
@@ -150,6 +175,9 @@ Always pass `-resume`. Do not delete `work/` — `-resume` needs it.
 | `--adapter_r1`, `--adapter_r2` | adapter sequences given to fastp. Default: TruSeq |
 | `--min_read_len N` | shortest read kept after trimming. Default: 50 |
 | `--run_kaiju false` | skip the protein search |
+| `--run_confirm true` | check every detection with Kaiju and BLAST; needs `--blast_db` and `--confirm_taxdump` (methods.md, section 9) |
+| `--confirm_merge_family ID` | count the genera of this family as one detection (the cockle study used 2808963, Arcobacteraceae) |
+| `--blast_forks N` | concurrent BLAST chunks. Default: 2 |
 | `--publish_intermediates false` | do not publish trimmed and host-removed FASTQ |
 | `--kraken_db PATH` | another database; move `--kraken_mem_gb`/`--kraken_forks` with it |
 | `--require_md5ok false` | process runs without a verified checksum |

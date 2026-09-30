@@ -31,6 +31,7 @@ process KAIJU {
     path "${sample}.kaiju.phylum.tsv", emit: phylum
     path "${sample}.kaiju.species.tsv", emit: species
     path "${sample}.kaiju.log", emit: log
+    tuple val(sample), path("${sample}.kaiju.out.gz"), emit: reads
 
     script:
     """
@@ -59,8 +60,9 @@ process KAIJU {
         ${sample}.kaiju.phylum.tsv | sort -k2,2nr > ${sample}.kaiju.summary.tsv
     [ -s ${sample}.kaiju.summary.tsv ] || : > ${sample}.kaiju.summary.tsv
 
-    # The per-read output is large and is not needed downstream. Compress it and
-    # leave it in the work directory; it is not published.
+    # The per-read output is large. It is compressed and left in the work
+    # directory, where the confirmation step (--run_confirm) reads it; it is not
+    # published.
     gzip -f ${sample}.kaiju.out
     """
 }

@@ -32,6 +32,7 @@ raw reads
    |  06  estimate abundance                             Bracken
    |  07  assign taxonomy from protein sequence          Kaiju
    |  08  combine every sample, run the QC gate
+   |  12  confirm every detection by Kaiju and BLAST    optional, --run_confirm
    |
    |  09  tidy count tables
    |  10  derive the within-individual tumour/host pairs
@@ -132,6 +133,11 @@ wrong: the cockle assembly classifies as 99.998 % *Homo sapiens*.
 **Run Kaiju as well as Kraken 2.** On the same reads Kraken 2 found 210 bacterial
 pairs and Kaiju found 3,249. Nucleotide *k*-mers miss marine organisms with no
 close relative in a database; protein search does not.
+
+**Confirm detections with independent methods.** `--run_confirm` checks every
+genus and species Kraken 2 detects with Kaiju (protein) and BLAST against nt, and
+labels it triple, double or single confirmed. In the cockle cohort 80 % of genus
+and 54 % of species detections were confirmed by all three.
 
 ## Documentation
 

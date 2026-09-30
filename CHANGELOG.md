@@ -6,7 +6,15 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 
 ---
 
-## Unreleased
+## 1.1.0 — 2026-09-30 — Trimming and confirmation of detections
+
+### Added
+
+- `--run_confirm`: every genus and species that Kraken 2 detects is checked by
+  Kaiju and by BLAST against nt, and labelled triple, double or single confirmed.
+  Results in `12_confirmation/`. Needs `--blast_db` and `--confirm_taxdump`.
+  Off by default. See `docs/methods.md`, section 9.
+- `cami-confirm` image (BLAST+ 2.17.0, Python).
 
 ### Changed
 
@@ -16,8 +24,11 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 - `docs/methods.md`: adapter trimming (section 8) and the classifier noise floor
   re-measured after trimming with a multi-assembly host reference (section 3).
 
-Results change: adapter dimers and poly-G reads that were assigned to bacteria
-are removed. Rerun `SUBSAMPLE_TRIM` and everything after it.
+### Does this move any number?
+
+Yes, for the trimming change: adapter dimers and poly-G reads that were assigned
+to bacteria are removed. Rerun `SUBSAMPLE_TRIM` and everything after it.
+`--run_confirm` adds output and changes no existing number.
 
 ---
 

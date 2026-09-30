@@ -470,6 +470,7 @@ def checkLocation() {
     checkScratch()
     checkInputs()
     checkKaijuInputs()
+    checkConfirmInputs()
 }
 
 /*
@@ -566,6 +567,36 @@ def checkKaijuInputs() {
 
         Turning it off is not free: on identical reads Kaiju found 3,249 bacterial
         pairs where Kraken 2 found 210. See modules/local/kaiju.nf.
+        """.stripIndent()
+}
+
+/*
+ * The confirmation needs Kaiju's per-read output, the BLAST nt database and a
+ * current NCBI taxdump. Missing any of them would surface only after profiling.
+ */
+def checkConfirmInputs() {
+    if( !asBool(params.run_confirm) || !(params.step in ['PROFILE', 'all']) )
+        return
+    def problems = []
+    if( !asBool(params.run_kaiju) )
+        problems << '--run_kaiju is false; the confirmation uses Kaiju as one of its legs'
+    def db = params.blast_db ? file(params.blast_db as String) : null
+    if( !db || !(db.parent.listFiles().any { f -> f.name.startsWith(db.name + '.') }) )
+        problems << "--blast_db is unset or has no database files: ${params.blast_db}"
+    else if( !file("${db.parent}/taxdb.btd").exists() )
+        problems << "no taxdb.btd beside ${params.blast_db}; BLAST cannot report taxids without it"
+    def tx = params.confirm_taxdump
+    if( !tx || !['nodes.dmp', 'names.dmp', 'merged.dmp'].every { f -> file("${tx}/${f}").exists() } )
+        problems << "--confirm_taxdump must be a directory with nodes.dmp, names.dmp and merged.dmp: ${tx}"
+    if( problems )
+        error """
+        --run_confirm is true, but:
+          ${problems.join('\n          ')}
+
+        Get the databases once (docs/usage.md, "Databases"):
+            update_blastdb.pl --decompress nt taxdb        # ~700 GB
+            curl -O https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
+        or leave the step off with --run_confirm false.
         """.stripIndent()
 }
 

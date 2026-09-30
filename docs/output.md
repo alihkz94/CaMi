@@ -17,6 +17,7 @@ results/
 ├── 09_tables/           --step STATS: tidy counts, metadata, integrity report
 ├── 10_pairs/            --step STATS: the tumour/matched-host pairs and tiers
 ├── 11_paired_test/      --step STATS: the differential abundance results
+├── 12_confirmation/     every detection checked by Kaiju and BLAST — ONLY with --run_confirm
 └── pipeline_info/       run reports from Nextflow
 ```
 
@@ -143,6 +144,26 @@ So `Homo` in these reports means "host DNA that the aligner did not remove". It
 does not mean a person touched the sample. Judge human contamination from the
 alignment rate in `03_human_removed/<sample>.minimap2.human.log`, not from this
 check.
+
+## 12_confirmation
+
+Written only with `--run_confirm`. See `docs/methods.md`, section 9.
+
+| File | Content |
+|---|---|
+| `confirmation_long.tsv` | One row for each detection (sample, genus or species): the Kaiju and BLAST evidence, each leg's verdict, and the `tier` |
+| `per_sample/<sample>.confirmation.tsv` | The same rows, one file for each sample |
+| `summary.tsv` | Detection counts by rank, tier and verdicts |
+| `blast_reads.tsv.gz` | Every BLAST query: its category (agree, nohit, far, …), best identity and best-hit taxids |
+| `params.json` | Thresholds, taxonomy checksums, counts, and checksums of the outputs |
+| `confirm_incomplete.txt` | Samples that could not be confirmed (a failed task). Absent when every sample was confirmed |
+
+To keep only well-supported detections, filter `confirmation_long.tsv` on
+`tier == triple`. Keep `blast_status == no_close_hit` in mind: it means nt holds
+no close reference, not that the taxon is absent.
+
+`ncbi_name` is the current NCBI name of the taxon. `kraken_name` is the name in
+the Kraken 2 database, which can be older.
 
 ## pipeline_info
 

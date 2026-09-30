@@ -242,3 +242,95 @@ fastp is now given the adapters (`--adapter_r1`, `--adapter_r2`; TruSeq by defau
 trims poly-G, drops reads shorter than `--min_read_len` (50 bp) and applies its
 low-complexity filter. Adapter-carrying reads were about 0.1 % of the non-host
 reads, but they sat in a few taxa and dominated those.
+
+---
+
+## 9. Triple confirmation of detections (`--run_confirm`)
+
+A Kraken 2 call rests on shared 31-mers. When the true organism has no close
+relative in the database, its reads can still share k-mers with a relative that
+is present, and the call names the wrong genus. Low-biomass samples make this
+worse, because a few hundred misassigned reads are then a large share of the
+community. `--run_confirm` checks every detection with two methods that do not
+share Kraken 2's database or its algorithm.
+
+### What is checked
+
+A **unit** is one (sample, taxon) pair that Kraken 2 detects: a genus or species
+with at least `--confirm_min_reads` reads (10) and at least `--confirm_min_frac`
+(1 %) of the sample's genus-resolved reads. The same denominator is used at both
+ranks. Human (9606, 9605) is excluded. `--confirm_merge_family` counts the genera
+of one family as a single entry, for a family the database cannot resolve.
+
+| leg | method | database | reads |
+|---|---|---|---|
+| Kraken 2 | nucleotide k-mers | the profiling database | the detection itself |
+| Kaiju | translated protein search | nr_euk | every read in the unit's clade |
+| BLAST | megablast alignment | nt | up to 20 reads per unit, mate 1 |
+
+The Kraken 2 leg is rerun with `--output` to get the per-read calls, and the rerun
+report must be byte-identical to the profiled one. The per-read calls inside each
+unit's clade must add up to the report's clade count. The BLAST reads are drawn
+with a fixed seed, so a rerun searches the same reads.
+
+All taxids (Kraken 2's database, Kaiju's `nodes.dmp`, nt's taxdb) are resolved
+through one current NCBI taxdump, `merged.dmp` included, and compared by lineage.
+A call agrees with unit T when T is in its lineage. Names are never compared.
+
+### Verdicts
+
+**Kaiju**, over the reads Kraken 2 placed in T's clade:
+
+- *confirmed*: at least 5 reads agree, and they are at least half of the reads
+  Kaiju resolved to T's rank
+- *disagrees*: at least 5 reads resolved, less than half agree
+- *insufficient*: otherwise
+
+Protein search rarely resolves species. A species unit whose Kaiju reads do not
+reach species rank can still pass on its genus with the same thresholds
+(`confirmed_at_genus`). Kraken 2 and BLAST must still agree at species rank.
+
+**BLAST**: the best hits of a read are all hits at its top bitscore. A read
+*agrees* at genus rank when a best hit lies inside T at ≥ 90 % identity. At
+species rank it needs ≥ 97 % identity over ≥ 80 % of the read. Reads whose best
+hits do not resolve to the rank ("uncultured bacterium") are *uninformative*.
+The unit is:
+
+- *confirmed*: at least 5 informative reads, and at least half of them agree
+- *no_hit*: not confirmed, and at least half the reads hit nothing in nt
+- *no_close_hit*: not confirmed, and most reads hit nothing, nothing resolvable,
+  or nothing close. nt holds no close reference. **This is not evidence against
+  the taxon**: nt has few whole-genome assemblies of environmental bacteria.
+- *disagrees*: otherwise; most reads are close to another taxon
+
+**Tier**: Kraken 2, plus each leg that confirmed → `triple`, `double` or `single`.
+
+NCBI moves species between genera, and databases built at different times
+disagree about it. A genus unit therefore also accepts the current genus of any
+species in its Kraken 2 clade that NCBI has since moved, when those species hold
+at least 5 % of the unit's reads. In the cockle cohort that recovered *Moraxella*
+(its *M. osloensis* reads are now *Faucicola*, which Kaiju and BLAST report).
+
+### In the cockle cohort
+
+563 samples, 7,656 units, 129,653 BLAST queries in 52 chunks:
+
+| rank | triple | double | single |
+|---|---|---|---|
+| genus (4,619) | 3,687 (80 %) | 411 | 521 |
+| species (3,037) | 1,637 (54 %) | 897 | 503 |
+
+### Cost
+
+Kaiju already runs in `PROFILE`; the confirmation reads its per-read output.
+The Kraken 2 rerun takes seconds per sample. BLAST dominates: each chunk scans
+nt once (~700 GB), then costs ~0.1 s per read. Measured with 12 threads, the scan
+took ~24 min from a cold shared file system and ~2 min with nt in the page cache,
+so a 2,500-read chunk takes ~28 min cold and ~6–7 min warm.
+
+On Slurm, page cache is charged to the job that first reads a page. A 48 GB
+BLAST task cannot hold nt, so it evicts nt while scanning it and every chunk
+starts cold. A job that reads nt once and stays alive for the duration (e.g.
+`--mem=760G`, `cat nt.* > /dev/null`, then `sleep`) keeps nt cached, and the
+BLAST tasks read it without being charged for it. For the cockle cohort that is
+~24 h of BLAST cold against ~6 h warm, before running chunks in parallel.

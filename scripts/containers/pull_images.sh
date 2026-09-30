@@ -33,7 +33,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 CONF="$REPO/conf/containers.config"
-GROUPS=(fetch qc align classify stats)
+GROUPS=(fetch qc align classify confirm stats)
 
 read_conf() {
     local key="$1"

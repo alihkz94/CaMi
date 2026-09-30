@@ -1,6 +1,6 @@
 # Containers
 
-Five images cover the whole pipeline. Each is defined by three files that say the
+Six images cover the whole pipeline. Each is defined by three files that say the
 same thing three ways:
 
 | File | Read by | Purpose |
@@ -14,7 +14,8 @@ same thing three ways:
 | `cami-fetch` | aria2c, curl, samtools, bgzip, python | `FETCH_GENOME`, `FETCH_UNMAPPED_BAM` |
 | `cami-qc` | fastp, seqkit, pigz, python | `SUBSAMPLE_TRIM`, `DEDUP`, `AGGREGATE_QC` |
 | `cami-align` | bwa-mem2, minimap2, samtools, gawk | `BUILD_HOST_INDEX`, `BUILD_MM2_INDEX`, `HOST_REMOVAL`, `HUMAN_REMOVAL` |
-| `cami-classify` | kraken2, bracken, kaiju | `KRAKEN2_BRACKEN`, `KAIJU` |
+| `cami-classify` | kraken2, bracken, kaiju | `KRAKEN2_BRACKEN`, `KAIJU`, `CONFIRM_KRAKEN` |
+| `cami-confirm` | blast, python | `CONFIRM_DRAW`, `CONFIRM_BLAST_PREP`, `CONFIRM_BLAST`, `CONFIRM_COMBINE` |
 | `cami-stats` | python, polars, pyarrow, numpy, scipy, statsmodels | `AGGREGATE_COUNTS`, `BUILD_PAIRS`, `PAIRED_TEST` |
 
 Images are grouped by pipeline stage rather than by tool, because steps like
@@ -62,7 +63,7 @@ numbers will be published, cite the digest rather than the tag.
 Record each release's digests here as it is published:
 
 ```bash
-for g in fetch qc align classify stats; do
+for g in fetch qc align classify confirm stats; do
     docker buildx imagetools inspect ghcr.io/alihkz94/cami-$g:<tag> \
         | awk '/^Digest:/{print "'"$g"'", $2}'
 done

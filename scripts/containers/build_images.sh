@@ -29,7 +29,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 CONF="$REPO/conf/containers.config"
-GROUPS_ALL=(fetch qc align classify stats)
+GROUPS_ALL=(fetch qc align classify confirm stats)
 
 # The tag lives in conf/containers.config so that Nextflow and this script can
 # never disagree about which image a given checkout expects.

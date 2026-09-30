@@ -56,7 +56,7 @@ jobs:
       # One broken environment should not hide the state of the other four.
       fail-fast: false
       matrix:
-        group: [fetch, qc, align, classify, stats]
+        group: [fetch, qc, align, classify, confirm, stats]
 
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +114,7 @@ jobs:
             qc)       run 'fastp --version; seqkit version; pigz --version; python3 -V' ;;
             align)    run 'bwa-mem2 version; minimap2 --version; samtools --version | head -1; awk --version | head -1' ;;
             classify) run 'kraken2 --version | head -1; bracken -v 2>&1 | head -1; kaiju -h 2>&1 | head -1' ;;
+            confirm)  run 'blastn -version | head -1; python3 -V' ;;
             stats)    run 'python3 -c "import polars, pyarrow, numpy, scipy, statsmodels; print(polars.__version__, pyarrow.__version__, numpy.__version__, scipy.__version__, statsmodels.__version__)"' ;;
           esac
           # ps is what Nextflow reads to record peak memory. Without it the trace

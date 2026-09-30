@@ -5,6 +5,7 @@
  *                  -> KRAKEN2 + BRACKEN  (abundance backbone)
  *                  -> KAIJU              (protein level, optional but advised)
  *                  -> AGGREGATE_QC
+ *                  -> CONFIRM_DETECTIONS (Kaiju + BLAST check of every detection, optional)
  *
  * Every output is named with the SAMPLE NAME. Where the reads came from — a
  * samplesheet, a directory, or an ENA accession — is decided once in
@@ -18,6 +19,7 @@ include { DEDUP            } from '../../modules/local/dedup'
 include { KRAKEN2_BRACKEN  } from '../../modules/local/kraken2_bracken'
 include { KAIJU            } from '../../modules/local/kaiju'
 include { AGGREGATE_QC     } from '../../modules/local/aggregate_qc'
+include { CONFIRM_DETECTIONS } from './confirm_detections'
 include { resolveInputs     } from '../../lib/helpers'
 include { asBool            } from '../../lib/helpers'
 
@@ -58,6 +60,15 @@ workflow PROFILE_MICROBIOME {
     // "false", which is true in Groovy. See lib/helpers.nf.
     if( asBool(params.run_kaiju) )
         KAIJU( DEDUP.out.dedup )
+
+    // Every Kraken 2 detection checked by Kaiju and by BLAST against nt. Needs
+    // Kaiju, so lib/helpers.nf refuses --run_confirm without --run_kaiju.
+    if( asBool(params.run_confirm) )
+        CONFIRM_DETECTIONS(
+            DEDUP.out.dedup,
+            KRAKEN2_BRACKEN.out.profiled.map { row -> tuple(row[0], row[1]) },
+            KAIJU.out.reads
+        )
 
     // Pass the reports as real inputs so the QC gate cannot race publishDir.
     profiled = KRAKEN2_BRACKEN.out.profiled
