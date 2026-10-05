@@ -17,6 +17,8 @@ One sample, one family, three genera:
   Genus C (300)       15 reads Kraken 2 leaves unclassified and Kaiju calls
                       genus C: a Kaiju-only detection. Kraken 2 cannot
                       check it (insufficient), BLAST agrees      -> double
+  "Family X bacterium" (400)  12 reads Kaiju calls a species with no genus (an
+                      NCBI placeholder): never a unit, at either rank
   Kaiju also detects genus A on its own: the same detection as Kraken 2's
   (kraken+kaiju), not a second unit.
 
@@ -42,7 +44,7 @@ BIN = REPO / "bin"
 S = "S1"
 
 REPORT = """\
-25.00\t25\t25\tU\t0\tunclassified
+37.00\t37\t37\tU\t0\tunclassified
 90.00\t90\t0\tR\t1\troot
 60.00\t60\t0\tD\t2\t  Bacteria
 60.00\t60\t0\tF\t10\t    Family X
@@ -55,15 +57,16 @@ REPORT = """\
 """
 
 NODES = [("1", "1", "no rank"), ("2", "1", "superkingdom"), ("10", "2", "family"),
-         ("100", "10", "genus"), ("101", "100", "species"), ("200", "10", "genus"), ("300", "10", "genus"),
+         ("100", "10", "genus"), ("101", "100", "species"), ("200", "10", "genus"), ("300", "10", "genus"), ("400", "10", "species"),
          ("2759", "1", "superkingdom"), ("9605", "2759", "genus"), ("9606", "9605", "species")]
 NAMES = {"1": "root", "2": "Bacteria", "10": "Family X", "100": "Genus A", "101": "Genus A sp1",
-         "200": "Genus B", "300": "Genus C", "2759": "Eukaryota", "9605": "Homo", "9606": "Homo sapiens"}
+         "200": "Genus B", "300": "Genus C", "400": "Family X bacterium", "2759": "Eukaryota", "9605": "Homo", "9606": "Homo sapiens"}
 
 READS = ([(f"a{i:02d}", "100") for i in range(20)] + [(f"s{i:02d}", "101") for i in range(20)]
          + [(f"b{i:02d}", "200") for i in range(20)] + [(f"h{i:02d}", "9606") for i in range(30)])
 UNCLASSIFIED = [f"u{i:02d}" for i in range(10)]
 KAIJU_ONLY = [f"k{i:02d}" for i in range(15)]      # Kraken 2: unclassified; Kaiju: genus C
+PLACEHOLDER = [f"p{i:02d}" for i in range(12)]     # Kraken 2: unclassified; Kaiju: genus-less species 400
 SEQ = "ACGT" * 37 + "AC"
 
 
@@ -86,15 +89,16 @@ class TripleConfirmation(unittest.TestCase):
         with gzip.open(self.d / f"{S}.kraken2.calls.tsv.gz", "wt") as fh:
             fh.write("".join(f"{r}/1\t{t}\n" for r, t in READS))
         with gzip.open(self.d / f"{S}_1.fastq.gz", "wt") as fh:
-            for r in [r for r, _ in READS] + UNCLASSIFIED + KAIJU_ONLY:
+            for r in [r for r, _ in READS] + UNCLASSIFIED + KAIJU_ONLY + PLACEHOLDER:
                 fh.write(f"@{r}/1\n{SEQ}\n+\n{'I' * len(SEQ)}\n")
-        (self.d / f"{S}.pairs").write_text(f"{len(READS) + len(UNCLASSIFIED) + len(KAIJU_ONLY)}\n")
+        (self.d / f"{S}.pairs").write_text(f"{len(READS) + len(UNCLASSIFIED) + len(KAIJU_ONLY) + len(PLACEHOLDER)}\n")
         with gzip.open(self.d / f"{S}.kaiju.out.gz", "wt") as fh:
             for r, t in READS:
                 call = "0" if t == "9606" else "100"
                 fh.write(f"{'U' if call == '0' else 'C'}\t{r}\t{call}\n")
             fh.write("".join(f"U\t{r}\t0\n" for r in UNCLASSIFIED))
             fh.write("".join(f"C\t{r}\t300\n" for r in KAIJU_ONLY))
+            fh.write("".join(f"C\t{r}\t400\n" for r in PLACEHOLDER))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -180,7 +184,7 @@ class TripleConfirmation(unittest.TestCase):
         self.assertEqual(self.draw().returncode, 0)
         with open(self.d / f"{S}.kunits.tsv") as fh:
             ku = {(r["rank"], r["taxid"]): r["kraken_unit"] for r in csv.DictReader(fh, delimiter="\t")}
-        self.assertEqual(ku, {("genus", "100"): "yes", ("genus", "300"): "no"})
+        self.assertEqual(ku, {("genus", "100"): "yes", ("genus", "300"): "no"})   # no species 400
         with gzip.open(self.d / f"{S}.kk2reads.tsv.gz", "rt") as fh:
             kk = [line.split("\t") for line in fh.read().splitlines()]
         self.assertEqual(len(kk), 15)

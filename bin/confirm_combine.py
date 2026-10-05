@@ -351,7 +351,7 @@ def kaiju_only_rows(s, ks, draws, reads_out, kraken_rows):
             lin = TX.lineage(c)
             if not lin:
                 continue
-            if T in lin or c in TX.lineage(T):
+            if T in lin or TX.resolve(c) in TX.lineage(T):
                 c_compat += 1
             if resolved_at(c, T, R):
                 c_res += 1
@@ -394,11 +394,14 @@ def kaiju_only_rows(s, ks, draws, reads_out, kraken_rows):
             blast_median_pident=statistics.median(pids) if pids else float("nan"),
             blast_top_other=top2(b_other), blast_status=b_status,
             legs="+".join(legs), tier={3: "triple", 2: "double", 1: "single"}[len(legs)], genus_unit_tier=""))
-    # species: the tier of the genus detection that holds it, whichever method made it
-    genus_tier = {(r["ncbi_taxid"] or r["taxid"]): r["tier"] for r in kraken_rows + rows if r["rank"] == "genus"}
-    for r in rows:
-        if r["rank"] == "species":
-            g = TX.at_rank(r["ncbi_taxid"], "genus")
+    # species: the tier of the genus detection that holds it, whichever method made
+    # it (the merged family stands in for its genera)
+    genus_tier = {(r["taxid"] if r["taxid"] == args.merge_family else (r["ncbi_taxid"] or r["taxid"])): r["tier"]
+                  for r in kraken_rows + rows if r["rank"] == "genus"}
+    for r in kraken_rows + rows:
+        if r["rank"] == "species" and not r["genus_unit_tier"] and r["ncbi_taxid"]:
+            lin = TX.lineage(r["ncbi_taxid"])
+            g = args.merge_family if args.merge_family and args.merge_family in lin else TX.at_rank(r["ncbi_taxid"], "genus")
             r["genus_unit_tier"] = genus_tier.get(g, "")
     return rows
 

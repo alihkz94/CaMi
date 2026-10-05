@@ -74,7 +74,7 @@ def kaiju_calls(path):
 def kaiju_detections(calls, tx, rule: Rule):
     """The detection rule applied to Kaiju's own calls: rows (rank, taxid, name,
     reads, rel_abundance, detected) and the denominator, as detections() does for a
-    Kraken 2 report. Taxids are current ones (tx). Only Bacteria, Archaea and
+    Kraken 2 report. A species counts only when its reads also count for a genus. Taxids are current ones (tx). Only Bacteria, Archaea and
     Viruses count: Kaiju's nr_euk also holds eukaryotes, and unremoved host reads
     land there. A read counts for its genus and its species; the genera inside
     rule.merge_family count as the family entry, under rank 'genus'."""
@@ -87,10 +87,14 @@ def kaiju_detections(calls, tx, rule: Rule):
         if not lin or MICROBIAL.isdisjoint(lin):
             continue
         g = rule.merge_family if rule.merge_family and rule.merge_family in lin else tx.at_rank(t, "genus")
+        if not g or g in rule.exclude:
+            continue
+        c[("genus", g)] = c.get(("genus", g), 0) + n
+        # A species counts only with a genus: the denominator is genus-resolved
+        # reads, so a genus-less placeholder ("X bacterium") would exceed 100%.
         sp = tx.at_rank(t, "species")
-        for key in (("genus", g), ("species", sp)):
-            if key[1] and key[1] not in rule.exclude:
-                c[key] = c.get(key, 0) + n
+        if sp and sp not in rule.exclude:
+            c[("species", sp)] = c.get(("species", sp), 0) + n
     total = sum(n for (rank, _), n in c.items() if rank == "genus")
     out = []
     for (rank, t), n in sorted(c.items()):

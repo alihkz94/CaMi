@@ -15,7 +15,9 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
   reads and gets a tier like any other.
 - `confirmation_long.tsv` gains `detected_by`, `kaiju_reads`,
   `kaiju_rel_abundance` and the `kraken_*` leg columns; `summary.tsv` gains
-  `detected_by` and `kraken_status`.
+  `detected_by` and `kraken_status`; `<sample>.draw.tsv` gains `origin`.
+- A Kaiju species counts only when its reads also count for a genus, so species
+  shares cannot exceed 100% (NCBI placeholders without a genus are not units).
 
 ### Does this move any number?
 
