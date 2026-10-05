@@ -134,9 +134,10 @@ wrong: the cockle assembly classifies as 99.998 % *Homo sapiens*.
 pairs and Kaiju found 3,249. Nucleotide *k*-mers miss marine organisms with no
 close relative in a database; protein search does not.
 
-**Confirm detections with independent methods.** `--run_confirm` checks every
-genus and species Kraken 2 detects with Kaiju (protein) and BLAST against nt, and
-labels it triple, double or single confirmed. In the cockle cohort 80 % of genus
+**Confirm detections with independent methods.** `--run_confirm` takes every
+genus and species that Kraken 2 or Kaiju detects, checks it with the other
+classifier and with BLAST against nt on the same reads, and labels it triple,
+double or single confirmed. Kaiju-only detections are kept, not discarded. In the cockle cohort 80 % of genus
 and 54 % of species detections were confirmed by all three.
 
 ## Documentation

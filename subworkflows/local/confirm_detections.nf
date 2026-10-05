@@ -1,11 +1,11 @@
 /*
- * CONFIRM_DETECTIONS — every Kraken 2 detection checked by two independent methods
+ * CONFIRM_DETECTIONS — every Kraken 2 and Kaiju detection checked by the other two methods
  * -----------------------------------------------------------------------------
  *   CONFIRM_KRAKEN      per-read Kraken 2 calls, report must be byte-identical
- *   CONFIRM_DRAW        detections (units), clade reads, <= 20 reads each for BLAST
+ *   CONFIRM_DRAW        Kraken 2 and Kaiju detections (units), their reads, <= 20 each for BLAST
  *   CONFIRM_BLAST_PREP  one pooled query set in chunks
  *   CONFIRM_BLAST       megablast against nt, one task per chunk
- *   CONFIRM_COMBINE     Kaiju and BLAST verdicts per unit -> triple/double/single
+ *   CONFIRM_COMBINE     the other two verdicts per unit -> triple/double/single
  *
  * Kaiju's per-read output comes from the KAIJU step itself. A sample that is
  * missing any piece is not silently absent: it is listed in
@@ -29,18 +29,22 @@ workflow CONFIRM_DETECTIONS {
     CONFIRM_KRAKEN( reads.join(reports) )
     calls = CONFIRM_KRAKEN.out.calls
 
+    taxdump = channel.value( file(params.confirm_taxdump, checkIfExists: true) )
+
     CONFIRM_DRAW(
         reads.map { sample, r1, _r2 -> tuple(sample, r1) }
              .join(reports)
              .join(calls.map { sample, c, _pairs -> tuple(sample, c) })
+             .join(kaiju),
+        taxdump
     )
 
     CONFIRM_BLAST_PREP(
-        CONFIRM_DRAW.out.draw.map { _s, _u, _k, draw, fa -> [draw, fa] }.flatten().collect()
+        CONFIRM_DRAW.out.draw.map { _s, _u, _k, draw, fa, _ku, _kk -> [draw, fa] }.flatten().collect()
     )
     CONFIRM_BLAST( CONFIRM_BLAST_PREP.out.chunks.flatten() )
 
-    // [sample, report, units, k2reads, draw, fasta, calls, pairs, kaiju]
+    // [sample, report, units, k2reads, draw, fasta, kunits, kk2reads, calls, pairs, kaiju]
     complete = reports.join(CONFIRM_DRAW.out.draw).join(calls).join(kaiju)
 
     reports.map { row -> [row[0]] }
@@ -50,10 +54,10 @@ workflow CONFIRM_DETECTIONS {
         .collectFile( name: 'confirm_incomplete.txt', storeDir: "${params.outdir}/12_confirmation", sort: true )
 
     CONFIRM_COMBINE(
-        complete.map { row -> [row[1], row[2], row[3], row[4], row[7], row[8]] }.flatten().collect(),
+        complete.map { row -> [row[1], row[2], row[3], row[4], row[6], row[7], row[9], row[10]] }.flatten().collect(),
         CONFIRM_BLAST_PREP.out.queries,
         CONFIRM_BLAST.out.hits.collect().ifEmpty([]),
         complete.map { row -> row[0] }.collectFile( name: 'confirm_samples.txt', newLine: true, sort: true ),
-        channel.value( file(params.confirm_taxdump, checkIfExists: true) )
+        taxdump
     )
 }

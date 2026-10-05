@@ -6,6 +6,24 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 
 ---
 
+## 1.2.0 — 2026-10-05 — Kaiju detections in the confirmation
+
+### Changed
+
+- `--run_confirm` also takes every genus and species that Kaiju detects under the
+  same rule. A Kaiju-only detection is checked by Kraken 2 and BLAST on Kaiju's
+  reads and gets a tier like any other.
+- `confirmation_long.tsv` gains `detected_by`, `kaiju_reads`,
+  `kaiju_rel_abundance` and the `kraken_*` leg columns; `summary.tsv` gains
+  `detected_by` and `kraken_status`.
+
+### Does this move any number?
+
+No existing verdict changes. The confirmation table gains rows for Kaiju-only
+detections.
+
+---
+
 ## 1.1.0 — 2026-09-30 — Trimming and confirmation of detections
 
 ### Added

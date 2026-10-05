@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """confirm_combine.py — confirmation of every detection by three independent methods.
 
-A unit is one (sample, taxon) that Kraken 2 detects under the detection rule.
-Kraken 2 is always the first leg. Kaiju (protein level, its own database) and
-BLAST (nucleotide alignment against nt) are the other two. All taxids are
+A unit is one (sample, taxon) that Kraken 2 OR Kaiju detects under the detection
+rule (confirm_draw.py). The method that detected it is the first leg; the other
+classifier and BLAST (nucleotide alignment against nt) check the same reads:
+  Kraken 2 unit    Kaiju and BLAST on the reads Kraken 2 placed in the clade
+  Kaiju-only unit  Kraken 2 and BLAST on the reads Kaiju placed in the taxon
+                   (a taxon both detect is one Kraken 2 unit, detected_by
+                   kraken+kaiju; its verdicts are those of a Kraken 2 unit) All taxids are
 resolved through ONE NCBI taxdump (merged.dmp applied) and compared by lineage:
 a call agrees with unit T when T is in the call's lineage. docs/methods.md,
 section 9, gives the reasoning for every threshold below.
@@ -26,7 +30,9 @@ section 9, gives the reasoning for every threshold below.
            no_close_hit   not confirmed, nohit + uninformative + far >= half the
                           reads: nt holds no close reference (NOT evidence against)
            disagrees      otherwise
-  tier   kraken, + kaiju if confirmed, + blast if confirmed -> triple / double / single
+  kraken (Kaiju-only units) the same test as the kaiju leg, with Kraken 2's per-read
+         calls on Kaiju's reads (no genus fallback: Kraken 2 resolves species)
+  tier   the detecting method, + each other leg that confirmed -> triple / double / single
 
 Genus units also accept the current genus of species that NCBI has moved out of
 the unit since the Kraken 2 database was built (e.g. Moraxella osloensis ->
@@ -34,6 +40,7 @@ Faucicola osloensis), when those species hold >= moved-min-share of the unit's r
 
 Inputs, in the working directory, for every sample of --samples:
   S.kraken2.report  S.units.tsv  S.k2reads.tsv.gz  S.draw.tsv  S.pairs
+  S.kunits.tsv      S.kk2reads.tsv.gz
   S.kaiju.out.gz    (full Kaiju per-read output: C/U, read, taxid)
 and queries.tsv plus every chunk_NNNN.blast.tsv.gz.
 Output: confirmation_long.tsv, per_sample/S.confirmation.tsv, blast_reads.tsv.gz,
@@ -84,9 +91,11 @@ def first_int(path):
 
 samples = [s for s in open(args.samples).read().split() if s]
 units = defaultdict(list)
+kunits = defaultdict(list)
 problems = []
 for s in samples:
-    for ext in ("kraken2.report", "units.tsv", "k2reads.tsv.gz", "draw.tsv", "pairs", "kaiju.out.gz"):
+    for ext in ("kraken2.report", "units.tsv", "k2reads.tsv.gz", "draw.tsv", "pairs", "kaiju.out.gz",
+                "kunits.tsv", "kk2reads.tsv.gz"):
         if not os.path.isfile(f"{s}.{ext}"):
             problems.append(f"{s}: no {s}.{ext}")
     if os.path.isfile(f"{s}.units.tsv"):
@@ -95,6 +104,12 @@ for s in samples:
             for line in fh:
                 _, rank, tid, name, n, ra = line.rstrip("\n").split("\t")
                 units[s].append((rank, tid, name, int(n), float(ra)))
+    if os.path.isfile(f"{s}.kunits.tsv"):
+        with open(f"{s}.kunits.tsv") as fh:
+            next(fh)
+            for line in fh:
+                _, rank, tid, name, n, ra, both = line.rstrip("\n").split("\t")
+                kunits[s].append((rank, tid, name, int(n), float(ra), both == "yes"))
 qid_of = {}
 with open("queries.tsv") as fh:
     next(fh)
@@ -187,7 +202,9 @@ def one_sample(s):
                     kj[r] = f[2].strip()
     if kaiju_lines != pairs:
         problems.append(f"{s}: Kaiju classified {kaiju_lines} pairs, Kraken 2 {pairs}")
-    if not us:
+    ks = kunits.get(s, [])
+    kaiju_hit = {(rank, tid): (n, ra) for rank, tid, _name, n, ra, _both in ks}
+    if not us and not ks:
         return s, [], [], problems
     clades = cc.clade_taxids(f"{s}.kraken2.report", [u[1] for u in us])
     by_tax = defaultdict(list)
@@ -197,8 +214,8 @@ def one_sample(s):
     with open(f"{s}.draw.tsv") as fh:
         next(fh)
         for line in fh:
-            _, rank, tid, r = line.rstrip("\n").split("\t")
-            draws[(rank, tid)].append(r)
+            _, rank, tid, r, origin = line.rstrip("\n").split("\t")
+            draws[(origin, rank, tid)].append(r)
     rows, reads_out = [], []
     genus_clade = {u[1]: clades[u[1]] for u in us if u[0] == "genus"}
     for rank, tid, name, n_rep, ra in us:
@@ -260,7 +277,7 @@ def one_sample(s):
                 if kg_agree >= args.min_agree and kg_agree / kg_res >= args.min_frac:
                     k_status, k_level = "confirmed_at_genus", "genus"
         cats, pids, b_other = Counter(), [], Counter()
-        for r in draws[(rank, tid)]:
+        for r in draws[("kraken", rank, tid)]:
             q = qid_of[(s, r)]
             cat, bp = blast_read(q, T, R, species, Ts) if T else ("uninformative", None)
             cats[cat] += 1
@@ -270,23 +287,18 @@ def one_sample(s):
                 labs = {label(t, R) for t, _, _ in best[q][2]}
                 b_other["/".join(sorted(labs)[:2])] += 1
             reads_out.append((s, rank, tid, r, q, cat, bp))
-        nq = sum(cats.values())
-        n_inf = cats["agree"] + cats["far"] + cats["disagree_close"]
-        b_frac = cats["agree"] / n_inf if n_inf else float("nan")
-        if n_inf >= args.min_agree and b_frac >= args.min_frac:
-            b_status = "confirmed"
-        elif cats["nohit"] >= 0.5 * nq:
-            b_status = "no_hit"
-        elif cats["nohit"] + cats["uninformative"] + cats["far"] >= 0.5 * nq:
-            b_status = "no_close_hit"
-        else:
-            b_status = "disagrees"
+        b_status, n_inf, b_frac, nq = blast_verdict(cats)
         legs = (["kraken"] + (["kaiju"] if k_status in ("confirmed", "confirmed_at_genus") else [])
                 + (["blast"] if b_status == "confirmed" else []))
+        key = (rank, tid if tid == args.merge_family else (T or tid))
+        kj_n, kj_ra = kaiju_hit.get(key, ("", ""))
         rows.append(dict(
-            sample=s, rank=rank, taxid=tid, kraken_name=name, ncbi_taxid=T or "", ncbi_name=TX.name.get(T or "", ""),
+            sample=s, rank=rank, taxid=tid, detected_by="kraken+kaiju" if kj_n != "" else "kraken",
+            kraken_name=name, ncbi_taxid=T or "", ncbi_name=TX.name.get(T or "", ""),
             compare_rank=R, also_accepted=";".join(sorted(TX.name.get(x, x) for x in Ts - {T})),
-            kraken_reads=n_rep, rel_abundance=ra,
+            kraken_reads=n_rep, rel_abundance=ra, kaiju_reads=kj_n, kaiju_rel_abundance=kj_ra,
+            kraken_classified="", kraken_resolved="", kraken_agree="", kraken_agree_frac=float("nan"),
+            kraken_compatible_frac=float("nan"), kraken_top_other="", kraken_status="detection",
             kaiju_classified=k_cls, kaiju_resolved=k_res, kaiju_agree=k_agree,
             kaiju_agree_frac=k_frac, kaiju_compatible_frac=(k_compat / k_cls if k_cls else float("nan")),
             kaiju_top_other=top2(k_other), kaiju_status=k_status,
@@ -304,7 +316,107 @@ def one_sample(s):
             for g, cl in genus_clade.items():
                 if r["taxid"] in cl:
                     r["genus_unit_tier"] = tier_of.get(g, "")
+    rows += kaiju_only_rows(s, ks, draws, reads_out, rows)
     return s, rows, reads_out, problems
+
+
+def kaiju_only_rows(s, ks, draws, reads_out, kraken_rows):
+    """Kaiju-only units: Kaiju is the detection; Kraken 2 and BLAST check its reads."""
+    only = [u for u in ks if not u[5]]
+    if not only:
+        return []
+    kaiju_of, kraken_of = {}, {}
+    with gzip.open(f"{s}.kk2reads.tsv.gz", "rt") as fh:
+        for line in fh:
+            r, kj, k2 = line.rstrip("\n").split("\t")
+            kaiju_of[r], kraken_of[r] = kj, k2
+    by_kaiju = defaultdict(list)
+    for r, t in kaiju_of.items():
+        by_kaiju[t].append(r)
+    rows = []
+    for rank, tid, name, n_unit, ra, _ in only:
+        R = target_rank(rank, tid)
+        T = TX.resolve(tid) or tid
+        species = rank == "species"
+        members = [r for t, rs in by_kaiju.items() if T in TX.lineage(t) for r in rs]
+        if len(members) != n_unit:
+            raise RuntimeError(f"{s} {rank}:{tid}: {len(members)} Kaiju reads vs {n_unit} in {s}.kunits.tsv")
+        c_cls = c_res = c_agree = c_compat = 0
+        c_other = Counter()
+        for r in members:
+            c = kraken_of[r]
+            if c == "0":
+                continue
+            c_cls += 1
+            lin = TX.lineage(c)
+            if not lin:
+                continue
+            if T in lin or c in TX.lineage(T):
+                c_compat += 1
+            if resolved_at(c, T, R):
+                c_res += 1
+                if T in lin:
+                    c_agree += 1
+                else:
+                    c_other[label(c, R)] += 1
+        c_frac = c_agree / c_res if c_res else float("nan")
+        if c_agree >= args.min_agree and c_frac >= args.min_frac:
+            c_status = "confirmed"
+        elif c_res >= args.min_agree and c_frac < args.min_frac:
+            c_status = "disagrees"
+        else:
+            c_status = "insufficient"
+        cats, pids, b_other = Counter(), [], Counter()
+        for r in draws[("kaiju", rank, tid)]:
+            q = qid_of[(s, r)]
+            cat, bp = blast_read(q, T, R, species, {T})
+            cats[cat] += 1
+            if bp is not None:
+                pids.append(bp)
+            if cat in ("disagree_close", "far") and q in best:
+                b_other["/".join(sorted({label(t, R) for t, _, _ in best[q][2]})[:2])] += 1
+            reads_out.append((s, rank, tid, r, q, cat, bp))
+        b_status, n_inf, b_frac, nq = blast_verdict(cats)
+        legs = ["kaiju"] + (["kraken"] if c_status == "confirmed" else []) + (["blast"] if b_status == "confirmed" else [])
+        rows.append(dict(
+            sample=s, rank=rank, taxid=tid, detected_by="kaiju", kraken_name="", ncbi_taxid=T,
+            ncbi_name=TX.name.get(T, name), compare_rank=R, also_accepted="", kraken_reads="", rel_abundance="",
+            kaiju_reads=n_unit, kaiju_rel_abundance=ra,
+            kraken_classified=c_cls, kraken_resolved=c_res, kraken_agree=c_agree, kraken_agree_frac=c_frac,
+            kraken_compatible_frac=(c_compat / c_cls if c_cls else float("nan")), kraken_top_other=top2(c_other),
+            kraken_status=c_status,
+            kaiju_classified="", kaiju_resolved="", kaiju_agree="", kaiju_agree_frac=float("nan"),
+            kaiju_compatible_frac=float("nan"), kaiju_top_other="", kaiju_status="detection",
+            kaiju_level="", kaiju_genus_resolved="", kaiju_genus_agree="",
+            blast_queries=nq, blast_with_hit=nq - cats["nohit"], blast_informative=n_inf, blast_agree=cats["agree"],
+            blast_agree_frac=b_frac, blast_far=cats["far"], blast_disagree_close=cats["disagree_close"],
+            blast_uninformative=cats["uninformative"], blast_nohit=cats["nohit"],
+            blast_median_pident=statistics.median(pids) if pids else float("nan"),
+            blast_top_other=top2(b_other), blast_status=b_status,
+            legs="+".join(legs), tier={3: "triple", 2: "double", 1: "single"}[len(legs)], genus_unit_tier=""))
+    # species: the tier of the genus detection that holds it, whichever method made it
+    genus_tier = {(r["ncbi_taxid"] or r["taxid"]): r["tier"] for r in kraken_rows + rows if r["rank"] == "genus"}
+    for r in rows:
+        if r["rank"] == "species":
+            g = TX.at_rank(r["ncbi_taxid"], "genus")
+            r["genus_unit_tier"] = genus_tier.get(g, "")
+    return rows
+
+
+def blast_verdict(cats):
+    """Unit verdict from the per-read BLAST categories: (status, informative, share, queries)."""
+    nq = sum(cats.values())
+    n_inf = cats["agree"] + cats["far"] + cats["disagree_close"]
+    b_frac = cats["agree"] / n_inf if n_inf else float("nan")
+    if n_inf >= args.min_agree and b_frac >= args.min_frac:
+        status = "confirmed"
+    elif cats["nohit"] >= 0.5 * nq:
+        status = "no_hit"
+    elif cats["nohit"] + cats["uninformative"] + cats["far"] >= 0.5 * nq:
+        status = "no_close_hit"
+    else:
+        status = "disagrees"
+    return status, n_inf, b_frac, nq
 
 
 def top2(counter):
@@ -338,16 +450,17 @@ if __name__ == "__main__":
                 fh.write("\t".join(cols) + "\n")
                 for r in rows:
                     fh.write("\t".join(fmt(r[c]) for c in cols) + "\n")
-    n_units = sum(len(v) for v in units.values())
+    n_units = sum(len(v) for v in units.values()) + sum(1 for v in kunits.values() for u in v if not u[5])
     if len(long_rows) != n_units:
         sys.exit(f"REFUSING: {len(long_rows)} rows for {n_units} units")
     with open("confirmation_long.tsv", "w") as fh:
         fh.write("\t".join(cols) + "\n")
         for r in long_rows:
             fh.write("\t".join(fmt(r[c]) for c in cols) + "\n")
-    summ = Counter((r["rank"], r["tier"], r["legs"], r["kaiju_status"], r["blast_status"]) for r in long_rows)
+    summ = Counter((r["rank"], r["detected_by"], r["tier"], r["legs"], r["kraken_status"], r["kaiju_status"],
+                    r["blast_status"]) for r in long_rows)
     with open("summary.tsv", "w") as fh:
-        fh.write("rank\ttier\tlegs\tkaiju_status\tblast_status\tunits\n")
+        fh.write("rank\tdetected_by\ttier\tlegs\tkraken_status\tkaiju_status\tblast_status\tunits\n")
         for k, v in sorted(summ.items()):
             fh.write("\t".join(k) + f"\t{v}\n")
     taxmd5 = {f: md5(os.path.join(args.taxdump, f)) for f in ("nodes.dmp", "names.dmp", "merged.dmp")

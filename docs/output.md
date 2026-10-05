@@ -151,7 +151,7 @@ Written only with `--run_confirm`. See `docs/methods.md`, section 9.
 
 | File | Content |
 |---|---|
-| `confirmation_long.tsv` | One row for each detection (sample, genus or species): the Kaiju and BLAST evidence, each leg's verdict, and the `tier` |
+| `confirmation_long.tsv` | One row for each detection (sample, genus or species) by Kraken 2 or Kaiju: `detected_by` (`kraken`, `kaiju` or `kraken+kaiju`), the evidence of the other two methods, each leg's verdict, and the `tier` |
 | `per_sample/<sample>.confirmation.tsv` | The same rows, one file for each sample |
 | `summary.tsv` | Detection counts by rank, tier and verdicts |
 | `blast_reads.tsv.gz` | Every BLAST query: its category (agree, nohit, far, …), best identity and best-hit taxids |
@@ -159,7 +159,9 @@ Written only with `--run_confirm`. See `docs/methods.md`, section 9.
 | `confirm_incomplete.txt` | Samples that could not be confirmed (a failed task). Absent when every sample was confirmed |
 
 To keep only well-supported detections, filter `confirmation_long.tsv` on
-`tier == triple`. Keep `blast_status == no_close_hit` in mind: it means nt holds
+`tier == triple`. Rows with `detected_by == kaiju` are taxa only Kaiju detects;
+their abundance is in `kaiju_reads` and `kaiju_rel_abundance` (Kaiju's own counts),
+and their Kraken 2 leg is in the `kraken_*` columns. Keep `blast_status == no_close_hit` in mind: it means nt holds
 no close reference, not that the taxon is absent.
 
 `ncbi_name` is the current NCBI name of the taxon. `kraken_name` is the name in

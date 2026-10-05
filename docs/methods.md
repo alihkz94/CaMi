@@ -252,21 +252,32 @@ relative in the database, its reads can still share k-mers with a relative that
 is present, and the call names the wrong genus. Low-biomass samples make this
 worse, because a few hundred misassigned reads are then a large share of the
 community. `--run_confirm` checks every detection with two methods that do not
-share Kraken 2's database or its algorithm.
+share the detecting method's database or its algorithm.
+
+Kaiju searches protein and finds organisms that Kraken 2 misses. Its own
+detections are therefore units too, checked the same way, instead of being
+discarded because Kraken 2 did not make them.
 
 ### What is checked
 
-A **unit** is one (sample, taxon) pair that Kraken 2 detects: a genus or species
-with at least `--confirm_min_reads` reads (10) and at least `--confirm_min_frac`
-(1 %) of the sample's genus-resolved reads. The same denominator is used at both
-ranks. Human (9606, 9605) is excluded. `--confirm_merge_family` counts the genera
-of one family as a single entry, for a family the database cannot resolve.
+A **unit** is one (sample, taxon) pair that Kraken 2 or Kaiju detects: a genus or
+species with at least `--confirm_min_reads` reads (10) and at least
+`--confirm_min_frac` (1 %) of the sample's genus-resolved reads, each method in its
+own counts. The same denominator is used at both ranks. Human (9606, 9605) is
+excluded; for Kaiju only Bacteria, Archaea and Viruses count, because its
+database also holds eukaryotes and unremoved host reads land there.
+`--confirm_merge_family` counts the genera of one family as a single entry, for a
+family the database cannot resolve.
 
-| leg | method | database | reads |
-|---|---|---|---|
-| Kraken 2 | nucleotide k-mers | the profiling database | the detection itself |
-| Kaiju | translated protein search | nr_euk | every read in the unit's clade |
-| BLAST | megablast alignment | nt | up to 20 reads per unit, mate 1 |
+A taxon both methods detect in a sample is one unit (`detected_by` =
+`kraken+kaiju`) and is judged as a Kraken 2 unit. A taxon only Kaiju detects is a
+Kaiju-only unit (`detected_by` = `kaiju`).
+
+| leg | method | database | Kraken 2 unit | Kaiju-only unit |
+|---|---|---|---|---|
+| Kraken 2 | nucleotide k-mers | the profiling database | the detection | its calls on Kaiju's reads |
+| Kaiju | translated protein search | nr_euk | its calls on the clade's reads | the detection |
+| BLAST | megablast alignment | nt | ≤ 20 of the clade's reads | ≤ 20 of Kaiju's reads |
 
 The Kraken 2 leg is rerun with `--output` to get the per-read calls, and the rerun
 report must be byte-identical to the profiled one. The per-read calls inside each
@@ -279,12 +290,14 @@ A call agrees with unit T when T is in its lineage. Names are never compared.
 
 ### Verdicts
 
-**Kaiju**, over the reads Kraken 2 placed in T's clade:
+**Kaiju** (Kraken 2 units), over the reads Kraken 2 placed in T's clade, and
+**Kraken 2** (Kaiju-only units), over the reads Kaiju placed in T:
 
 - *confirmed*: at least 5 reads agree, and they are at least half of the reads
   Kaiju resolved to T's rank
 - *disagrees*: at least 5 reads resolved, less than half agree
-- *insufficient*: otherwise
+- *insufficient*: otherwise. For a Kaiju-only unit this is the usual outcome:
+  Kraken 2 left the reads unclassified, which is why only Kaiju detected the taxon.
 
 Protein search rarely resolves species. A species unit whose Kaiju reads do not
 reach species rank can still pass on its genus with the same thresholds
@@ -303,7 +316,8 @@ The unit is:
   the taxon**: nt has few whole-genome assemblies of environmental bacteria.
 - *disagrees*: otherwise; most reads are close to another taxon
 
-**Tier**: Kraken 2, plus each leg that confirmed → `triple`, `double` or `single`.
+**Tier**: the detecting method, plus each other leg that confirmed → `triple`,
+`double` or `single`.
 
 NCBI moves species between genera, and databases built at different times
 disagree about it. A genus unit therefore also accepts the current genus of any
@@ -313,7 +327,7 @@ at least 5 % of the unit's reads. In the cockle cohort that recovered *Moraxella
 
 ### In the cockle cohort
 
-563 samples, 7,656 units, 129,653 BLAST queries in 52 chunks:
+Kraken 2 units: 563 samples, 7,656 units, 129,653 BLAST queries in 52 chunks:
 
 | rank | triple | double | single |
 |---|---|---|---|

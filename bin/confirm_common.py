@@ -57,6 +57,48 @@ def detections(report, rule: Rule):
     return out, total
 
 
+MICROBIAL = frozenset({"2", "2157", "10239"})   # Bacteria, Archaea, Viruses
+
+
+def kaiju_calls(path):
+    """{read_id: taxid} for the classified pairs of a Kaiju per-read output."""
+    calls = {}
+    with open_text(path) as fh:
+        for line in fh:
+            f = line.split("\t", 3)
+            if f[0] == "C":
+                calls[read_id(f[1])] = f[2].strip()
+    return calls
+
+
+def kaiju_detections(calls, tx, rule: Rule):
+    """The detection rule applied to Kaiju's own calls: rows (rank, taxid, name,
+    reads, rel_abundance, detected) and the denominator, as detections() does for a
+    Kraken 2 report. Taxids are current ones (tx). Only Bacteria, Archaea and
+    Viruses count: Kaiju's nr_euk also holds eukaryotes, and unremoved host reads
+    land there. A read counts for its genus and its species; the genera inside
+    rule.merge_family count as the family entry, under rank 'genus'."""
+    per_call = {}
+    for t in calls.values():
+        per_call[t] = per_call.get(t, 0) + 1
+    c = {}
+    for t, n in per_call.items():
+        lin = tx.lineage(t)
+        if not lin or MICROBIAL.isdisjoint(lin):
+            continue
+        g = rule.merge_family if rule.merge_family and rule.merge_family in lin else tx.at_rank(t, "genus")
+        sp = tx.at_rank(t, "species")
+        for key in (("genus", g), ("species", sp)):
+            if key[1] and key[1] not in rule.exclude:
+                c[key] = c.get(key, 0) + n
+    total = sum(n for (rank, _), n in c.items() if rank == "genus")
+    out = []
+    for (rank, t), n in sorted(c.items()):
+        ra = n / total if total else 0.0
+        out.append((rank, t, tx.name.get(t, t), n, ra, n >= rule.min_reads and ra >= rule.min_frac))
+    return out, total
+
+
 def clade_taxids(report, unit_taxids):
     """{unit_taxid: set(taxids in its clade, itself included)} from the report tree,
     so the clade read count equals the report's clade count exactly."""

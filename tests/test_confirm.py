@@ -3,7 +3,7 @@
 =============================================================================
 test_confirm.py — the triple confirmation on a cohort small enough to reason about
 -----------------------------------------------------------------------------
-One sample, one family, two genera:
+One sample, one family, three genera:
 
   Genus A (100)       40 reads. Kaiju calls every read genus A, BLAST hits
                       species A1 at 99 %                          -> triple
@@ -14,6 +14,11 @@ One sample, one family, two genera:
   Genus B (200)       20 reads. Kaiju says genus A (disagrees), BLAST finds
                       nothing (no_hit)                            -> single
   Homo (9605/9606)    30 reads, never a detection and not in the denominator
+  Genus C (300)       15 reads Kraken 2 leaves unclassified and Kaiju calls
+                      genus C: a Kaiju-only detection. Kraken 2 cannot
+                      check it (insufficient), BLAST agrees      -> double
+  Kaiju also detects genus A on its own: the same detection as Kraken 2's
+  (kraken+kaiju), not a second unit.
 
 The same run on the cockle cohort (563 samples, 7,656 detections) reproduced
 the published confirmation table; that check needs the data and lives in the
@@ -37,7 +42,7 @@ BIN = REPO / "bin"
 S = "S1"
 
 REPORT = """\
-10.00\t10\t10\tU\t0\tunclassified
+25.00\t25\t25\tU\t0\tunclassified
 90.00\t90\t0\tR\t1\troot
 60.00\t60\t0\tD\t2\t  Bacteria
 60.00\t60\t0\tF\t10\t    Family X
@@ -50,14 +55,15 @@ REPORT = """\
 """
 
 NODES = [("1", "1", "no rank"), ("2", "1", "superkingdom"), ("10", "2", "family"),
-         ("100", "10", "genus"), ("101", "100", "species"), ("200", "10", "genus"),
+         ("100", "10", "genus"), ("101", "100", "species"), ("200", "10", "genus"), ("300", "10", "genus"),
          ("2759", "1", "superkingdom"), ("9605", "2759", "genus"), ("9606", "9605", "species")]
 NAMES = {"1": "root", "2": "Bacteria", "10": "Family X", "100": "Genus A", "101": "Genus A sp1",
-         "200": "Genus B", "2759": "Eukaryota", "9605": "Homo", "9606": "Homo sapiens"}
+         "200": "Genus B", "300": "Genus C", "2759": "Eukaryota", "9605": "Homo", "9606": "Homo sapiens"}
 
 READS = ([(f"a{i:02d}", "100") for i in range(20)] + [(f"s{i:02d}", "101") for i in range(20)]
          + [(f"b{i:02d}", "200") for i in range(20)] + [(f"h{i:02d}", "9606") for i in range(30)])
 UNCLASSIFIED = [f"u{i:02d}" for i in range(10)]
+KAIJU_ONLY = [f"k{i:02d}" for i in range(15)]      # Kraken 2: unclassified; Kaiju: genus C
 SEQ = "ACGT" * 37 + "AC"
 
 
@@ -80,21 +86,23 @@ class TripleConfirmation(unittest.TestCase):
         with gzip.open(self.d / f"{S}.kraken2.calls.tsv.gz", "wt") as fh:
             fh.write("".join(f"{r}/1\t{t}\n" for r, t in READS))
         with gzip.open(self.d / f"{S}_1.fastq.gz", "wt") as fh:
-            for r in [r for r, _ in READS] + UNCLASSIFIED:
+            for r in [r for r, _ in READS] + UNCLASSIFIED + KAIJU_ONLY:
                 fh.write(f"@{r}/1\n{SEQ}\n+\n{'I' * len(SEQ)}\n")
-        (self.d / f"{S}.pairs").write_text(f"{len(READS) + len(UNCLASSIFIED)}\n")
+        (self.d / f"{S}.pairs").write_text(f"{len(READS) + len(UNCLASSIFIED) + len(KAIJU_ONLY)}\n")
         with gzip.open(self.d / f"{S}.kaiju.out.gz", "wt") as fh:
             for r, t in READS:
                 call = "0" if t == "9606" else "100"
                 fh.write(f"{'U' if call == '0' else 'C'}\t{r}\t{call}\n")
             fh.write("".join(f"U\t{r}\t0\n" for r in UNCLASSIFIED))
+            fh.write("".join(f"C\t{r}\t300\n" for r in KAIJU_ONLY))
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def draw(self):
         return run(BIN / "confirm_draw.py", "--sample", S, "--report", f"{S}.kraken2.report",
-                   "--calls", f"{S}.kraken2.calls.tsv.gz", "--mate1", f"{S}_1.fastq.gz", cwd=self.d)
+                   "--calls", f"{S}.kraken2.calls.tsv.gz", "--mate1", f"{S}_1.fastq.gz",
+                   "--kaiju", f"{S}.kaiju.out.gz", "--taxdump", "taxdump", cwd=self.d)
 
     def blast(self):
         r = run(BIN / "confirm_blast_prep.py", "--chunk", "25", cwd=self.d)
@@ -103,8 +111,8 @@ class TripleConfirmation(unittest.TestCase):
             rows = list(csv.DictReader(fh, delimiter="\t"))
         by_chunk = {}
         for q in rows:
-            if q["read_id"].startswith(("a", "s")):
-                tax = "999" if q["read_id"].startswith("s") else "101"
+            if q["read_id"].startswith(("a", "s", "k")):
+                tax = {"s": "999", "a": "101", "k": "300"}[q["read_id"][0]]
                 by_chunk.setdefault(q["chunk"], []).append(f"{q['qid']}\tACC1\t{tax}\t99.0\t150\t150\t1e-70\t270\n")
             else:
                 by_chunk.setdefault(q["chunk"], [])
@@ -160,6 +168,25 @@ class TripleConfirmation(unittest.TestCase):
         self.assertEqual(sp["genus_unit_tier"], "triple")
         b = t[("genus", "200")]
         self.assertEqual((b["tier"], b["kaiju_status"], b["blast_status"]), ("single", "disagrees", "no_hit"))
+        self.assertEqual(t[("genus", "100")]["detected_by"], "kraken+kaiju")
+        self.assertEqual(b["detected_by"], "kraken")
+        c = t[("genus", "300")]
+        self.assertEqual((c["detected_by"], c["tier"], c["legs"], c["kraken_status"], c["kaiju_status"],
+                          c["blast_status"]),
+                         ("kaiju", "double", "kaiju+blast", "insufficient", "detection", "confirmed"))
+        self.assertEqual(c["kaiju_reads"], "15")
+
+    def test_kaiju_units_and_their_kraken_calls(self):
+        self.assertEqual(self.draw().returncode, 0)
+        with open(self.d / f"{S}.kunits.tsv") as fh:
+            ku = {(r["rank"], r["taxid"]): r["kraken_unit"] for r in csv.DictReader(fh, delimiter="\t")}
+        self.assertEqual(ku, {("genus", "100"): "yes", ("genus", "300"): "no"})
+        with gzip.open(self.d / f"{S}.kk2reads.tsv.gz", "rt") as fh:
+            kk = [line.split("\t") for line in fh.read().splitlines()]
+        self.assertEqual(len(kk), 15)
+        self.assertTrue(all(k == "300" and c == "0" for _, k, c in kk))
+        drawn = [l for l in (self.d / f"{S}.draw.tsv").read_text().splitlines() if l.endswith("\tkaiju")]
+        self.assertEqual(len(drawn), 15)
 
     def test_refuses_when_kaiju_and_kraken_saw_different_pairs(self):
         self.assertEqual(self.draw().returncode, 0)
