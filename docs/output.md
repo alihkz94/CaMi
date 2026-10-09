@@ -6,13 +6,13 @@ that step. Every file starts with the sample code.
 
 ```
 results/
-├── 01_trimmed/          adapter and quality trimming (fastp)
+├── 01_trimmed/          adapter, poly-G and quality trimming (fastp)
 ├── 02_host_removed/     cockle reads removed (BWA-MEM2)
 ├── 03_human_removed/    human reads removed (minimap2)
 ├── 04_dedup/            duplicates removed — THE MICROBIAL READ SET
 ├── 05_kraken2/          taxonomic assignment (Kraken 2)
 ├── 06_bracken/          abundance estimates (Bracken)
-├── 07_kaiju/            protein level assignment — ONLY with --run_kaiju
+├── 07_kaiju/            protein level assignment (Kaiju) — absent with --run_kaiju false
 ├── 08_summary/          the tables that combine all samples
 ├── 09_tables/           --step STATS: tidy counts, metadata, integrity report
 ├── 10_pairs/            --step STATS: the tumour/matched-host pairs and tiers
@@ -21,7 +21,7 @@ results/
 └── pipeline_info/       run reports from Nextflow
 ```
 
-Directory `07_kaiju` is absent when you do not use `--run_kaiju`. The number stays
+Directory `07_kaiju` is absent with `--run_kaiju false`. The number stays
 reserved, so the same step always has the same number. Directories 09 to 11 appear
 only after `--step STATS`.
 
@@ -40,6 +40,10 @@ directory is the archive copy, and its names must stay the same.
 ---
 
 ## 01_trimmed
+
+fastp removes the adapters (`--adapter_r1`, `--adapter_r2`), poly-G tails and low
+quality bases, then drops low-complexity reads and reads shorter than
+`--min_read_len`. See `methods.md`, section 8.
 
 | File | Content |
 |---|---|
@@ -103,7 +107,7 @@ writes an empty table and continues. The QC report shows the sample as low power
 
 ## 07_kaiju
 
-Written only with `--run_kaiju`.
+Written unless `--run_kaiju false`.
 
 | File | Content |
 |---|---|

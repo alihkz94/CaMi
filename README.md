@@ -23,7 +23,7 @@ Developed on the transmissible cancer of the common cockle *Cerastoderma edule*
 ```
 raw reads
    |
-   |  01  trim adapters and low quality bases            fastp
+   |  01  trim adapters, poly-G and low quality bases    fastp
    |  02  remove host reads                              BWA-MEM2 + coverage/identity filter
    |  03  remove human reads                             minimap2 + coverage/identity filter
    |  04  remove duplicates          -> MICROBIAL READ SET
@@ -117,14 +117,20 @@ CaMi filters on alignment coverage and identity instead.
 
 **Check the false-positive floor before setting a confidence threshold.**
 Classifying 2,000,000 fragments of pure cockle DNA — where every bacterial call
-is wrong by construction — showed that any setting with `--confidence >= 0.05`
-reports fewer bacteria than host DNA alone produces.
+is wrong by construction — showed that, with one host assembly and untrimmed
+adapters, any setting with `--confidence >= 0.05` reports fewer bacteria than host
+DNA alone produces.
 
 | Setting | Real reads | Host-only floor | Signal / noise |
 |---|---|---|---|
 | **standard-16 conf 0** (default) | 0.0529 % | 0.0101 % | **5.2 ×** |
 | PlusPF conf 0 | 0.3700 % | 0.1297 % | 2.9 × |
 | standard-16 conf 0.1 | 0.0003 % | 0.0009 % | 0.33 × |
+
+With adapter and poly-G trimming and a host reference covering the host's
+diversity (three *C. edule* assemblies), confidence 0.05 gave 31 × over the host
+floor against 6 × at 0. The floor depends on the host reference: measure it for
+yours ([docs/methods.md](docs/methods.md), section 3).
 
 **`Homo` in a Kraken report is not contamination.** Standard-16 contains one
 eukaryote, human. Cockle is absent, so cockle reads are either unclassified or
@@ -137,8 +143,9 @@ close relative in a database; protein search does not.
 **Confirm detections with independent methods.** `--run_confirm` takes every
 genus and species that Kraken 2 or Kaiju detects, checks it with the other
 classifier and with BLAST against nt on the same reads, and labels it triple,
-double or single confirmed. Kaiju-only detections are kept, not discarded. In the cockle cohort 80 % of genus
-and 54 % of species detections were confirmed by all three.
+double or single confirmed. Kaiju-only detections are kept, not discarded. In
+the cockle cohort 80 % of genus and 54 % of species detections were confirmed by
+all three.
 
 ## Documentation
 

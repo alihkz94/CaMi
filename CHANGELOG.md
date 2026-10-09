@@ -6,6 +6,20 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 
 ---
 
+## Unreleased
+
+### Documentation
+
+- Poly-G trimming (since 1.1.0) is stated in the README, `docs/output.md`,
+  `docs/usage.md` and `docs/methods.md` section 8.
+- The confidence result in the README and `docs/methods.md` section 3 is qualified
+  by the 1.1.0 re-measurement; `--kraken_confidence` is listed in `docs/usage.md`.
+- Kaiju is documented as on by default (`--run_kaiju false` turns it off).
+- `docs/statistics.md` uses the pipeline's `--stats_*` option names.
+- `containers/README.md` counts six images.
+
+---
+
 ## 1.2.0 — 2026-10-05 — Kaiju detections in the confirmation
 
 ### Changed

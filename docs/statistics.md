@@ -171,7 +171,7 @@ Across all 563 samples: **38 pairs**, graded by how confounded they are.
 | 3 | both WGA | 5 | no prep confound *within* the pair, but WGA distorts abundance |
 | 4 | prep **mismatched** (native vs WGA) | 16 | **excluded** — disease confounded with library prep |
 
-Default is `--max-tier 2`, giving **n = 17**.
+Default is `--stats_max_tier 2`, giving **n = 17**.
 
 ---
 
@@ -183,13 +183,13 @@ Default is `--max-tier 2`, giving **n = 17**.
    log-ratios, which is what a compositional design can support.
 2. **Prevalence filter before the transform.** Sparsity is extreme — many
    samples carry under 1,000 microbial pairs. A taxon must be non-zero in
-   `--min-prevalence` (default 0.5) of the tested samples.
-3. **Pseudocount after filtering** (default 0.5), so it perturbs a small dense
+   `--stats_min_prevalence` (default 0.5) of the tested samples.
+3. **Pseudocount after filtering** (`--stats_pseudocount`, default 0.5), so it perturbs a small dense
    matrix instead of inventing structure across thousands of empty cells.
 4. **Exact paired permutation test.** Under "tumour and host are exchangeable
    within a cockle", each pair's sign is a coin flip. With n pairs there are
    exactly 2^n sign assignments, and at n≈9–17 they are *enumerated* — exact, no
-   normality assumption. Above `--exact-max-n` a seeded Monte Carlo sample is
+   normality assumption. Above `--stats_exact_max_n` (20) a seeded Monte Carlo sample is
    used and the report says so.
 5. **p-value convention matches the mode.** Exhaustive enumeration uses `b/m`
    (the observed vector is always present, so p ≥ 1/2^n > 0). Monte Carlo uses

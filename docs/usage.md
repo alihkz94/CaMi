@@ -172,7 +172,7 @@ and `-resume`. Only the confirmation runs; it reads Kaiju's per-read output from
 | `--sample_code_scheme` | `bruzos` reads the cockle study's sample-code grammar; `none` treats a name as a name. Default: `bruzos` on the ENA route, `none` otherwise |
 | `--samples A,B` | only these samples; also accepts a file, one name per line |
 | `--subsample N` | use N read pairs — **testing only** |
-| `--adapter_r1`, `--adapter_r2` | adapter sequences given to fastp. Default: TruSeq |
+| `--adapter_r1`, `--adapter_r2` | adapter sequences given to fastp. Default: TruSeq. Poly-G tails are always trimmed |
 | `--min_read_len N` | shortest read kept after trimming. Default: 50 |
 | `--run_kaiju false` | skip the protein search |
 | `--run_confirm true` | check every detection with Kaiju and BLAST; needs `--blast_db` and `--confirm_taxdump` (methods.md, section 9) |
@@ -180,6 +180,7 @@ and `-resume`. Only the confirmation runs; it reads Kaiju's per-read output from
 | `--blast_forks N` | concurrent BLAST chunks. Default: 2 |
 | `--publish_intermediates false` | do not publish trimmed and host-removed FASTQ |
 | `--kraken_db PATH` | another database; move `--kraken_mem_gb`/`--kraken_forks` with it |
+| `--kraken_confidence X` | Kraken 2 confidence. Default: 0, for a single host assembly; 0.05 suited a host reference of three assemblies (methods.md, section 3) |
 | `--require_md5ok false` | process runs without a verified checksum |
 | `--container_dir PATH` | run from prebuilt `.sif` files instead of pulling |
 | `--stats_max_tier N` | how confounded a tumour/host pair may be (see statistics.md) |

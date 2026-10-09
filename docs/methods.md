@@ -131,8 +131,8 @@ Put the two tables together:
 | PlusPF conf 0.1 | 0.0020 % | 0.0052 % | 0.38 × |
 | standard-16 conf 0.1 | 0.0003 % | 0.0009 % | 0.33 × |
 
-**Every setting with confidence ≥ 0.05 reports fewer bacteria than pure host DNA
-produces by itself.** Those settings do not measure the microbiome. They measure
+**With one host assembly and untrimmed adapters, every setting with confidence
+≥ 0.05 reports fewer bacteria than pure host DNA produces by itself.** Those settings do not measure the microbiome. They measure
 noise. The inherited `--confidence 0.1` was one of them.
 
 The default is therefore **standard-16 at confidence 0**: the best ratio, and the
@@ -146,11 +146,11 @@ analysis, not as the primary result:
 --kraken_db /slurm-databases/Kraken2/PlusPF_20250402 --kraken_mem_gb 130 --kraken_forks 4
 ```
 
-### Re-measured with adapter trimming and a stronger host reference
+### Re-measured with adapter and poly-G trimming and a stronger host reference
 
-The floor above was measured before adapter trimming (section 8) and with a single
-host assembly. The measurement was repeated on the full cockle cohort (563
-samples) after adapter trimming and a second host screen against three *C. edule*
+The floor above was measured before adapter and poly-G trimming (section 8) and
+with a single host assembly. The measurement was repeated on the full cockle
+cohort (563 samples) after that trimming and a second host screen against three *C. edule*
 assemblies (GCA_947846245.1, GCA_963989375.1, GCA_963989325.1). The host-only
 floor was taken from 2.2 million real cockle reads that the single-assembly screen
 had missed, and from 2 million simulated reads.
@@ -194,9 +194,9 @@ Kaiju finding more than the largest nucleotide database is the expected result f
 a marine sample. Use Kraken 2 and Bracken for the abundance backbone, and Kaiju to
 show what the nucleotide method missed.
 
-Kaiju is off by default because its index needs about 187 GB of RAM for EACH
-concurrent task — it loads the index instead of memory-mapping it. Turn it on with
-`--run_kaiju true`.
+Kaiju is on by default. Its index needs about 187 GB of RAM for EACH concurrent
+task — it loads the index instead of memory-mapping it — so turn it off with
+`--run_kaiju false` on a machine that cannot spare the memory.
 
 ---
 
@@ -228,19 +228,20 @@ A full run holds roughly 30 million pairs, about 75 times more.
 
 ---
 
-## 8. Adapter trimming
+## 8. Adapter and poly-G trimming
 
-fastp finds adapters by the overlap of the two mates, which needs an insert of at
-least about 30 bp. Adapter dimers (inserts of 10–30 bp) therefore kept their
-adapter, and poly-G tails were not trimmed because auto-detection relies on
-Illumina read headers that ENA-renamed reads no longer carry. Kraken 2 assigned
+Up to version 1.0.1, fastp found adapters by the overlap of the two mates, which
+needs an insert of at least about 30 bp. Adapter dimers (inserts of 10–30 bp)
+therefore kept their adapter. Poly-G tails were not trimmed either, because fastp
+turns poly-G trimming on only when it recognises a two-colour instrument from the
+Illumina read headers, and ENA-renamed reads no longer carry them. Kraken 2 assigned
 these reads to bacteria: in the cockle cohort they became two of the most prevalent
 "species" (*Xanthomonas euvesicatoria* and *Mycobacterium canetti*). None of 420
 such reads had a BLAST hit to either genus.
 
-fastp is now given the adapters (`--adapter_r1`, `--adapter_r2`; TruSeq by default),
-trims poly-G, drops reads shorter than `--min_read_len` (50 bp) and applies its
-low-complexity filter. Adapter-carrying reads were about 0.1 % of the non-host
+Since 1.1.0, fastp is given the adapters (`--adapter_r1`, `--adapter_r2`; TruSeq by
+default), always trims poly-G (`--trim_poly_g`), drops reads shorter than
+`--min_read_len` (50 bp) and applies its low-complexity filter. Adapter-carrying reads were about 0.1 % of the non-host
 reads, but they sat in a few taxa and dominated those.
 
 ---

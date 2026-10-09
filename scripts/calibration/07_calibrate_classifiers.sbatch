@@ -95,7 +95,9 @@ if [[ ! -s trim_1.fastq.gz ]]; then
     log "subsampling proportion $PROP (seed $SEED)"
     seqkit sample -j "$THREADS" -s "$SEED" -p "$PROP" -o sub_1.fastq.gz "$R1"
     seqkit sample -j "$THREADS" -s "$SEED" -p "$PROP" -o sub_2.fastq.gz "$R2"
-    log "trimming (fastp), same settings as the pipeline"
+    # fastp defaults, as the pipeline ran before 1.1.0: no explicit adapters, no forced
+    # poly-G trimming. This reproduces the first noise floor in docs/methods.md, section 3.
+    log "trimming (fastp defaults, pre-1.1.0 pipeline settings)"
     fastp --thread "$THREADS" --dont_eval_duplication \
           -i sub_1.fastq.gz -I sub_2.fastq.gz \
           -o trim_1.fastq.gz -O trim_2.fastq.gz \

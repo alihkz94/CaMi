@@ -40,7 +40,7 @@ nextflow run alihkz94/CaMi -profile singularity,slurm --container_dir /shared/im
 Build them yourself if you are changing one, or want to verify it:
 
 ```bash
-bash scripts/containers/build_images.sh singularity          # all five
+bash scripts/containers/build_images.sh singularity          # all six
 bash scripts/containers/build_images.sh docker align         # just one
 ```
 
@@ -48,7 +48,7 @@ bash scripts/containers/build_images.sh docker align         # just one
 
 1. Edit `containers/<group>/environment.yml`.
 2. Bump `container_tag` in `conf/containers.config` **in the same commit**.
-3. Push. `.github/workflows/containers.yml` builds all five, checks that every
+3. Push. `.github/workflows/containers.yml` builds all six, checks that every
    tool actually runs, and publishes them on a `v*` tag.
 
 Never repoint an existing tag at a different image.
