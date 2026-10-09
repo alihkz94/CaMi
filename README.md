@@ -136,16 +136,18 @@ yours ([docs/methods.md](docs/methods.md), section 3).
 eukaryote, human. Cockle is absent, so cockle reads are either unclassified or
 wrong: the cockle assembly classifies as 99.998 % *Homo sapiens*.
 
-**Run Kaiju as well as Kraken 2.** On the same reads Kraken 2 found 210 bacterial
-pairs and Kaiju found 3,249. Nucleotide *k*-mers miss marine organisms with no
-close relative in a database; protein search does not.
+**Run Kaiju as well as Kraken 2, and confirm what only Kaiju finds.** Nucleotide
+*k*-mers miss marine organisms with no close relative in a database; protein
+search does not. Protein search also places host reads on bacterial proteins:
+on 2.2 million cockle reads that escaped a single-assembly host screen, Kaiju
+called 5.24 % microbial, Kraken 2 0.0086 %. Treat Kaiju-only taxa as candidates.
 
 **Confirm detections with independent methods.** `--run_confirm` takes every
 genus and species that Kraken 2 or Kaiju detects, checks it with the other
 classifier and with BLAST against nt on the same reads, and labels it triple,
 double or single confirmed. Kaiju-only detections are kept, not discarded. In
-the cockle cohort 80 % of genus and 54 % of species detections were confirmed by
-all three.
+the cockle cohort 80 % of genus and 54 % of species detections by Kraken 2 were
+confirmed by all three; of the detections only Kaiju made, 7 % and 0.3 %.
 
 ## Documentation
 

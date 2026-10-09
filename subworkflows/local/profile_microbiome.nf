@@ -51,8 +51,8 @@ workflow PROFILE_MICROBIOME {
     DEDUP(         HUMAN_REMOVAL.out.nonhost )
     KRAKEN2_BRACKEN( DEDUP.out.dedup )
 
-    // Kaiju is ON by default: it found 3,249 bacterial pairs where Kraken 2 found
-    // 210 on the same reads, and that difference is the reason the step exists.
+    // Kaiju is ON by default: protein search finds organisms that Kraken 2 misses
+    // (docs/methods.md, section 5).
     // Turn it off with --run_kaiju false where the nr_euk index will not fit —
     // it needs about 187 GB of RAM for EACH concurrent task.
     //

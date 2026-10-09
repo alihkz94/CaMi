@@ -7,13 +7,14 @@
  *   unclassified. Kaiju translates the read and searches protein space, which is
  *   far more conserved, so it finds organisms that the nucleotide method misses.
  *
- *   On the same 397,334 trimmed pairs of ERR10680552:
- *       Kraken 2 / standard-16, confidence 0 :   210 bacterial pairs
- *       Kaiju    / nr_euk                    : 3,249 bacterial pairs
+ *   On the pilot (397,334 pairs of ERR10680552, before adapter trimming, one host
+ *   assembly) Kraken 2 found 210 bacterial pairs and Kaiju 3,249.
  *
- *   Kaiju finding MORE than the largest nucleotide database is the expected
- *   result for a marine sample, and it is the reason this step exists. Kraken 2
- *   and Bracken give the abundance backbone; Kaiju gives the sensitivity.
+ *   Not all of that is microbial: protein search also places host reads on
+ *   conserved bacterial proteins. On 2.2 M escaped cockle reads Kaiju calls
+ *   5.24 % microbial, Kraken 2 0.0086 %. Kraken 2 and Bracken give the abundance
+ *   backbone; Kaiju gives sensitivity, and its taxa need confirmation
+ *   (--run_confirm). See docs/methods.md, section 5.
  *
  * RESOURCES
  *   The nr_euk index is about 187 GB and Kaiju loads it into memory — it does not

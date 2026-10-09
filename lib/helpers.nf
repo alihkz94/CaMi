@@ -565,8 +565,8 @@ def checkKaijuInputs() {
         or turn the step off with --run_kaiju false. docs/usage.md says how to
         build the index if your site has no copy.
 
-        Turning it off is not free: on identical reads Kaiju found 3,249 bacterial
-        pairs where Kraken 2 found 210. See modules/local/kaiju.nf.
+        Turning it off is not free: protein search finds organisms that Kraken 2
+        misses. See docs/methods.md, section 5.
         """.stripIndent()
 }
 

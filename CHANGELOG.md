@@ -17,6 +17,10 @@ Notable changes to CaMi. Versioning is semantic, and about reproducibility:
 - Kaiju is documented as on by default (`--run_kaiju false` turns it off).
 - `docs/statistics.md` uses the pipeline's `--stats_*` option names.
 - `containers/README.md` counts six images.
+- Kaiju's host noise is documented (`docs/methods.md` section 5): the pilot
+  figure (Kaiju 3,249 vs Kraken 2 210 bacterial pairs) is no longer presented as
+  microbial signal, and Kaiju-only detections are reported separately in
+  section 9 and the README.
 
 ---
 

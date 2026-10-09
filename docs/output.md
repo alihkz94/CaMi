@@ -116,9 +116,10 @@ Written unless `--run_kaiju false`.
 | `<sample>.kaiju.species.tsv` | Read counts for each species |
 
 Kaiju searches protein sequence, so it finds organisms that have no close relative
-in any nucleotide database. On the same reads it found 3,249 bacterial pairs where
-Kraken 2 found 210. Use Kraken 2 and Bracken for the abundance backbone, and Kaiju
-to show what the nucleotide method missed.
+in any nucleotide database. It also places some host reads on bacterial proteins
+(`methods.md`, section 5). Use Kraken 2 and Bracken for the abundance backbone,
+and treat taxa that only Kaiju reports as candidates to confirm with
+`--run_confirm`.
 
 ## 08_summary
 

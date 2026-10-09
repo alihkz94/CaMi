@@ -107,8 +107,9 @@ Memory and parallelism follow the database size:
 --kaiju_names /db/Kaiju/names.dmp
 ```
 
-Use `--run_kaiju false` if the memory is not available. Note that on the same
-reads Kaiju found 3,249 bacterial pairs where Kraken 2 found 210.
+Use `--run_kaiju false` if the memory is not available. Kaiju finds organisms
+that Kraken 2 misses, but it also calls some host reads bacterial
+(docs/methods.md, section 5).
 
 **BLAST nt and an NCBI taxdump** — only for `--run_confirm`, which checks every
 detection with Kaiju and BLAST (docs/methods.md, section 9). nt is about 700 GB;

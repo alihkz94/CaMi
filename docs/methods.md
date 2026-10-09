@@ -104,7 +104,7 @@ made at `--confidence 0`. On identical reads:
 | PlusPF | 0.1 | 2,138 | 8 | 1,493 |
 | PlusPF | 0.05 | 3,518 | 55 | 2,863 |
 | PlusPF | 0 | 7,597 | 1,470 | 5,500 |
-| Kaiju nr_euk (protein) | | 6,103 | **3,249** | n/a |
+| Kaiju nr_euk (protein) | | 6,103 | 3,249 (see section 5) | n/a |
 
 ### The false positive floor
 
@@ -183,16 +183,30 @@ contamination from the alignment rate in `03_human_removed/<sample>.minimap2.hum
 
 ---
 
-## 5. Kaiju is not redundant
+## 5. Kaiju: more sensitive, and with its own host noise
 
 Kraken 2 matches exact 31-base nucleotide k-mers. A marine bacterium with no close
 relative in the database matches nothing and is reported as unclassified. Kaiju
 translates the read and searches protein space, which is far more conserved.
 
-On the same 397,334 pairs: Kraken 2 found 210 bacterial pairs, Kaiju found 3,249.
-Kaiju finding more than the largest nucleotide database is the expected result for
-a marine sample. Use Kraken 2 and Bracken for the abundance backbone, and Kaiju to
-show what the nucleotide method missed.
+On the pilot sample (397,334 pairs, before adapter trimming and with one host
+assembly) Kraken 2 found 210 bacterial pairs and Kaiju 3,249. Part of that
+difference is not microbial. Protein search also places host reads on conserved
+bacterial proteins. Kaiju (nr_euk, default settings) was run on pure cockle DNA:
+
+| cockle reads | Kaiju microbial calls |
+|---|---|
+| 2.2 M real reads that one host assembly missed and three caught | 5.24 % |
+| 2 M simulated reads | 0.18 % |
+| assembly fragments | 0.07 % |
+
+Kraken 2 at confidence 0.05 calls 0.0086 % of the same kind of reads bacterial
+(section 3). In the cockle cohort, 184 genera had Kaiju counts compatible with
+this host noise; 4.7 % of the real cockle reads were called *Streptococcus*.
+
+Use Kraken 2 and Bracken for the abundance backbone. Treat a taxon that only
+Kaiju reports as a candidate: confirm it with `--run_confirm` (section 9), and
+measure Kaiju's host floor for your own host before reading Kaiju-only genera.
 
 Kaiju is on by default. Its index needs about 187 GB of RAM for EACH concurrent
 task — it loads the index instead of memory-mapping it — so turn it off with
@@ -334,6 +348,18 @@ Kraken 2 units: 563 samples, 7,656 units, 129,653 BLAST queries in 52 chunks:
 |---|---|---|---|
 | genus (4,619) | 3,687 (80 %) | 411 | 521 |
 | species (3,037) | 1,637 (54 %) | 897 | 503 |
+
+Kaiju-only units (taxa Kraken 2 did not detect in that sample), 559 samples:
+
+| rank | triple | double | single |
+|---|---|---|---|
+| genus (2,242) | 161 (7 %) | 419 | 1,662 |
+| species (1,840) | 5 (0.3 %) | 111 | 1,724 |
+
+For most of them Kraken 2 is `insufficient` and BLAST finds `no_hit`. Where BLAST
+does hit, some are bacterial and some are animal: Kaiju-only *Streptococcus* and
+*Marinifilum* reads hit mostly animals, including trematode parasites of the
+cockle (section 5).
 
 ### Cost
 
